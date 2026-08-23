@@ -386,6 +386,15 @@ async function execute(payload) {
 
 createServer(async (request, response) => {
   if (request.method === 'OPTIONS') return send(response, 204, {});
+  if (request.method === 'GET' && (request.url === '/' || request.url === '/health')) {
+    return send(response, 200, {
+      service: 'CoSci Compiler',
+      status: 'online',
+      executeEndpoint: '/api/v2/execute',
+      runtimesEndpoint: '/api/v2/runtimes',
+      note: 'Submit code to the execute endpoint using an HTTP POST request.',
+    });
+  }
   if (request.method === 'GET' && request.url === '/favicon.ico') {
     response.writeHead(204, { 'cache-control': 'public, max-age=86400' });
     return response.end();
