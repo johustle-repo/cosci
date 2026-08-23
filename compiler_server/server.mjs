@@ -44,13 +44,34 @@ const runtimes = [
   { language: 'javascript', version: process.version, aliases: ['js', 'node'] },
 ];
 
-function headers() {
+function allowedOrigin(requestOrigin = '') {
+  const configured = (process.env.COSCI_ALLOWED_ORIGIN || '*')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  if (configured.includes('*')) return '*';
+
+  const trusted = new Set([
+    ...configured,
+    'https://psueducode-apk.web.app',
+    'https://psueducode-apk.firebaseapp.com',
+  ]);
+  const isLocalDevelopment = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(
+    requestOrigin,
+  );
+  return trusted.has(requestOrigin) || isLocalDevelopment
+    ? requestOrigin
+    : configured[0];
+}
+
+function headers(requestOrigin = '') {
   return {
     'content-type': 'application/json; charset=utf-8',
-    'access-control-allow-origin': process.env.COSCI_ALLOWED_ORIGIN || '*',
+    'access-control-allow-origin': allowedOrigin(requestOrigin),
     'access-control-allow-methods': 'GET,POST,OPTIONS',
     'access-control-allow-headers': 'content-type, authorization',
     'cache-control': 'no-store',
+    vary: 'Origin',
   };
 }
 
@@ -257,7 +278,7 @@ async function evaluateQuiz(request) {
 }
 
 function send(response, status, data) {
-  response.writeHead(status, headers());
+  response.writeHead(status, headers(response.requestOrigin));
   response.end(JSON.stringify(data));
 }
 
@@ -385,6 +406,7 @@ async function execute(payload) {
 }
 
 createServer(async (request, response) => {
+  response.requestOrigin = request.headers.origin || '';
   if (request.method === 'OPTIONS') return send(response, 204, {});
   if (request.method === 'GET' && (request.url === '/' || request.url === '/health')) {
     return send(response, 200, {

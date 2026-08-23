@@ -8,7 +8,10 @@ services:
     healthCheckPath: /api/v2/runtimes
     envVars:
       - key: COSCI_ALLOWED_ORIGIN
-        value: https://psueducode-apk.web.app
+        # The compiler API does not use browser cookies. Authentication for
+        # protected routes is handled with Firebase bearer tokens, so wildcard
+        # CORS safely supports Firebase's two hosting domains and local Flutter
+        # development without maintaining a fragile single-origin value.
+        value: '*'
       - key: COSCI_JOBS_DIR
         value: /workspace
-
