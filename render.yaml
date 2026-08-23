@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: cosci-compiler
+    runtime: docker
+    plan: free
+    dockerContext: ./compiler_server
+    dockerfilePath: ./compiler_server/Dockerfile
+    healthCheckPath: /api/v2/runtimes
+    envVars:
+      - key: COSCI_ALLOWED_ORIGIN
+        value: https://psueducode-apk.web.app
+      - key: COSCI_JOBS_DIR
+        value: /workspace
+

@@ -1,0 +1,27 @@
+services:
+  cosci-compiler:
+    build:
+      context: ./compiler_server
+    container_name: cosci-compiler
+    ports:
+      - "8787:8787"
+    environment:
+      PORT: "8787"
+      COSCI_ALLOWED_ORIGIN: "*"
+      COSCI_JOBS_DIR: "/workspace/"
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,nosuid
+    volumes:
+      - cosci-compiler-jobs:/workspace
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    mem_limit: 512m
+    cpus: 1.0
+    restart: unless-stopped
+
+volumes:
+  cosci-compiler-jobs:

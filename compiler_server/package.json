@@ -1,0 +1,8 @@
+{
+  "name": "cosci-compiler-service",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "firebase-admin": "^14.2.0"
+  }
+}

@@ -1,0 +1,89 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function own(uid) { return signedIn() && request.auth.uid == uid; }
+    function profile() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid))
+        : get(/databases/$(database)/documents/users/$(request.auth.token.email.lower()));
+    }
+    function role() { return profile().data.role; }
+    function admin() { return signedIn() && role() == 'admin'; }
+    function instructor() { return signedIn() && role() in ['instructor', 'professor', 'teacher', 'faculty']; }
+    function staff() { return admin() || instructor(); }
+    function validProgram(value) { return value in ['BS Information Technology', 'BS Computer Science', 'BS Mathematics-CIT']; }
+    function validYear(value) { return value in ['1st Year', '2nd Year']; }
+
+    match /users/{uid} {
+      allow create: if own(uid) && request.resource.data.uid == uid &&
+        request.resource.data.role == 'student' && request.resource.data.accountStatus == 'active' &&
+        validProgram(request.resource.data.program) && validYear(request.resource.data.yearLevel);
+      allow read: if own(uid) || (signedIn() && resource.data.uid == request.auth.uid) || staff();
+      allow update: if admin() || ((own(uid) || (signedIn() && resource.data.uid == request.auth.uid)) && request.resource.data.uid == resource.data.uid &&
+        request.resource.data.email == resource.data.email && request.resource.data.role == resource.data.role &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'displayName', 'program', 'yearLevel', 'photoUrl', 'lastLoginAt', 'updatedAt'
+        ]));
+      allow delete: if admin();
+      match /{studentData=**} {
+        allow read: if own(uid) || staff();
+        allow write: if own(uid) || admin();
+      }
+      match /simulation_attempts/{attemptId} {
+        allow read: if own(uid) || staff();
+        allow create: if own(uid);
+        allow update: if own(uid) || admin() || (instructor() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'instructorFeedback', 'reviewedBy', 'reviewedAt'
+          ]));
+        allow delete: if own(uid) || admin();
+      }
+    }
+    match /user_profiles/{uid} {
+      allow read: if own(uid) || staff();
+      allow create, update: if own(uid) || admin();
+      allow delete: if admin();
+      match /{data=**} { allow read: if own(uid) || staff(); allow write: if own(uid) || admin(); }
+    }
+    match /progress/{uid} {
+      allow read: if own(uid) || staff();
+      allow create, update: if own(uid) || admin();
+      allow delete: if admin();
+    }
+    // Explicit collection-group authorization for instructor analytics.
+    match /{path=**}/simulation_attempts/{attemptId} {
+      allow read: if staff();
+    }
+    match /simulation_private_tests/{simulationId} {
+      allow read, write: if admin();
+    }
+    match /quiz_answer_keys/{quizId}/{document=**} {
+      allow read, write: if admin();
+    }
+    match /quiz_attempts/{attemptId} {
+      allow read: if signedIn() && resource.data.userId == request.auth.uid || staff();
+      allow create, update, delete: if false;
+    }
+    match /settings/app_settings {
+      allow read: if signedIn();
+      allow write: if admin();
+    }
+    match /settings_backups/{backupId} {
+      allow read, write: if admin();
+    }
+    match /{collection}/{document=**} {
+      allow read: if (signedIn() && collection in [
+        'lessons', 'simulations', 'quizzes', 'puzzles', 'daily_challenges',
+        'badge_definitions', 'announcements', 'gamification_rules'
+      ]) || (staff() && collection in [
+        'settings', 'syllabi', 'syllabus_analysis', 'content_generation_jobs', 'activity_logs'
+      ]);
+      allow write: if admin() && collection in [
+        'lessons', 'simulations', 'quizzes', 'puzzles', 'daily_challenges',
+        'badge_definitions', 'announcements', 'gamification_rules', 'settings',
+        'syllabi', 'syllabus_analysis', 'content_generation_jobs', 'activity_logs'
+      ];
+    }
+  }
+}

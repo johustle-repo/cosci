@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+<body style="margin:0;background:#111;display:grid;place-items:center;min-height:100vh">
+  <canvas id="canvas"></canvas>
+  <video id="video" style="display:none" muted preload="auto"></video>
+  <script>
+    const video = document.querySelector('#video');
+    const canvas = document.querySelector('#canvas');
+    const params = new URLSearchParams(location.search);
+    video.src = 'file:///C:/Users/Jonathan%20Quiles/Videos/error.mp4';
+    video.addEventListener('loadedmetadata', () => {
+      document.title = `duration-${video.duration}`;
+      video.currentTime = Math.min(Number(params.get('t') || 0), video.duration);
+    });
+    video.addEventListener('seeked', () => {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      document.body.dataset.ready = 'true';
+    });
+  </script>
+</body>
+</html>
