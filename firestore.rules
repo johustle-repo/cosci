@@ -3,6 +3,10 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
     function own(uid) { return signedIn() && request.auth.uid == uid; }
+    function emailOwn(documentId) {
+      return signedIn() && request.auth.token.email != null &&
+        documentId == request.auth.token.email.lower();
+    }
     function profile() {
       return exists(/databases/$(database)/documents/users/$(request.auth.uid))
         ? get(/databases/$(database)/documents/users/$(request.auth.uid))
@@ -14,18 +18,28 @@ service cloud.firestore {
     function staff() { return admin() || instructor(); }
     function verifiedLearner() {
       return signedIn() && (
-        !('idVerificationStatus' in profile().data) ||
-        profile().data.idVerificationStatus in ['approved', 'legacy_approved', 'not_required']
+        (!('idVerificationStatus' in profile().data) &&
+          !('id_verification_status' in profile().data)) ||
+        ('idVerificationStatus' in profile().data &&
+          profile().data.idVerificationStatus in ['approved', 'legacy_approved', 'not_required']) ||
+        ('id_verification_status' in profile().data &&
+          profile().data.id_verification_status in ['approved', 'legacy_approved', 'not_required'])
       );
     }
     function validProgram(value) { return value in ['BS Information Technology', 'BS Computer Science', 'BS Mathematics-CIT']; }
     function validYear(value) { return value in ['1st Year', '2nd Year']; }
 
     match /users/{uid} {
-      allow create: if own(uid) && request.resource.data.uid == uid &&
-        request.resource.data.role == 'student' && request.resource.data.accountStatus == 'active' &&
-        request.resource.data.idVerificationStatus == 'required' &&
-        validProgram(request.resource.data.program) && validYear(request.resource.data.yearLevel);
+      allow create: if
+        (own(uid) && request.resource.data.uid == uid &&
+          request.resource.data.role == 'student' && request.resource.data.accountStatus == 'active' &&
+          request.resource.data.idVerificationStatus == 'required' &&
+          validProgram(request.resource.data.program) && validYear(request.resource.data.yearLevel)) ||
+        (emailOwn(uid) && request.resource.data.uid == request.auth.uid &&
+          request.resource.data.email == request.auth.token.email.lower() &&
+          request.resource.data.role == 'student' && request.resource.data.account_status == 'active' &&
+          request.resource.data.id_verification_status == 'required' &&
+          validProgram(request.resource.data.program) && validYear(request.resource.data.year_level));
       allow read: if own(uid) || (signedIn() && resource.data.uid == request.auth.uid) || staff();
       allow update: if admin() || ((own(uid) || (signedIn() && resource.data.uid == request.auth.uid)) && request.resource.data.uid == resource.data.uid &&
         request.resource.data.email == resource.data.email && request.resource.data.role == resource.data.role &&
