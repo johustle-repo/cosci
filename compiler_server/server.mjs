@@ -98,6 +98,9 @@ function parseServiceAccount(rawValue) {
 function firebaseAdmin() {
   if (!getApps().length) {
     const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
+    if (process.env.RENDER && !serviceAccountJson) {
+      throw new Error('firebase-admin-missing-render-credentials');
+    }
     const serviceAccount = parseServiceAccount(serviceAccountJson);
     const credential = serviceAccount
       ? cert(serviceAccount)
@@ -203,6 +206,9 @@ function adminApiError(error, sessionLabel = 'admin') {
   const detail = String(error?.message ?? '');
   const credentialsInvalid =
     detail.includes('default credentials') ||
+    detail.includes('Unable to detect a Project Id') ||
+    detail.includes('Could not load the default credentials') ||
+    detail.includes('firebase-admin-missing-render-credentials') ||
     detail.includes('firebase-admin-invalid-service-account') ||
     detail.includes('Failed to parse private key') ||
     code === 'app/invalid-credential';
