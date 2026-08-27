@@ -75,11 +75,32 @@ function headers(requestOrigin = '') {
   };
 }
 
+function parseServiceAccount(rawValue) {
+  let value = String(rawValue ?? '').trim();
+  if (!value) return null;
+  if (!value.startsWith('{')) {
+    try {
+      const decoded = Buffer.from(value, 'base64').toString('utf8').trim();
+      if (decoded.startsWith('{')) value = decoded;
+    } catch (_) {
+      // JSON.parse below will return a clear configuration error.
+    }
+  }
+  if (value.startsWith('"{') && value.endsWith('}"')) value = JSON.parse(value);
+  const account = JSON.parse(value);
+  if (!account.project_id || !account.client_email || !account.private_key) {
+    throw new Error('firebase-admin-invalid-service-account');
+  }
+  account.private_key = account.private_key.replace(/\\n/g, '\n');
+  return account;
+}
+
 function firebaseAdmin() {
   if (!getApps().length) {
     const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
-    const credential = serviceAccountJson
-      ? cert(JSON.parse(serviceAccountJson))
+    const serviceAccount = parseServiceAccount(serviceAccountJson);
+    const credential = serviceAccount
+      ? cert(serviceAccount)
       : applicationDefault();
     initializeApp({ credential });
   }
@@ -95,7 +116,10 @@ async function deleteUserAccount(request) {
   const identity = await auth.verifyIdToken(authorization.slice(7));
   const administrator = await db.collection('users').doc(identity.uid).get();
   const administratorData = administrator.data() ?? {};
-  if (!administrator.exists || administratorData.role !== 'admin' ||
+  const administratorRole = String(administratorData.role ?? '')
+    .trim().toLowerCase().replaceAll('-', '_');
+  if (!administrator.exists ||
+      !['admin', 'super_admin'].includes(administratorRole) ||
       administratorData.isActive === false ||
       administratorData.accountStatus === 'suspended') {
     return {
@@ -118,10 +142,18 @@ async function deleteUserAccount(request) {
     return { status: 404, data: { message: 'The user account no longer exists.' } };
   }
   const targetData = target.data() ?? {};
-  if (targetData.role === 'admin') {
-    const administrators = await db.collection('users')
-      .where('role', '==', 'admin').get();
-    if (administrators.size <= 1) {
+  const targetRole = String(targetData.role ?? '')
+    .trim().toLowerCase().replaceAll('-', '_');
+  if (['admin', 'super_admin'].includes(targetRole)) {
+    const userDocuments = await db.collection('users').get();
+    const administratorCount = userDocuments.docs.filter((document) => {
+      const role = String(document.data().role ?? '')
+        .trim().toLowerCase().replaceAll('-', '_');
+      return ['admin', 'super_admin'].includes(role) &&
+        document.data().isActive !== false &&
+        document.data().accountStatus !== 'suspended';
+    }).length;
+    if (administratorCount <= 1) {
       return {
         status: 409,
         data: { message: 'The last administrator account cannot be deleted.' },
@@ -164,6 +196,38 @@ async function deleteUserAccount(request) {
   });
   await batch.commit();
   return { status: 200, data: { deleted: true, uid: targetUid } };
+}
+
+function adminApiError(error, sessionLabel = 'admin') {
+  const code = String(error?.code ?? '');
+  const detail = String(error?.message ?? '');
+  const credentialsInvalid =
+    detail.includes('default credentials') ||
+    detail.includes('firebase-admin-invalid-service-account') ||
+    detail.includes('Failed to parse private key') ||
+    code === 'app/invalid-credential';
+  if (credentialsInvalid) {
+    return {
+      status: 503,
+      message: 'The online admin service is missing valid Firebase Admin credentials. Configure FIREBASE_SERVICE_ACCOUNT_JSON on Render and redeploy the service.',
+    };
+  }
+  if (code === 'auth/id-token-expired') {
+    return { status: 401, message: `Your ${sessionLabel} session expired. Sign in again and retry.` };
+  }
+  if (code === 'auth/argument-error' || code === 'auth/invalid-id-token') {
+    return { status: 401, message: `The ${sessionLabel} session token is invalid. Sign in again and retry.` };
+  }
+  if (code.includes('permission-denied') || code === 'auth/insufficient-permission') {
+    return {
+      status: 403,
+      message: 'The Render service account does not have permission to manage Firebase Authentication and Firestore.',
+    };
+  }
+  return {
+    status: 500,
+    message: `The user account could not be deleted (${code || 'server-error'}). Check the Render service logs for the protected error details.`,
+  };
 }
 
 function normalizeAnswer(value) {
@@ -418,6 +482,7 @@ createServer(async (request, response) => {
       status: 'online',
       executeEndpoint: '/api/v2/execute',
       runtimesEndpoint: '/api/v2/runtimes',
+      adminApiConfigured: Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim()),
       note: 'Submit code to the execute endpoint using an HTTP POST request.',
     });
   }
@@ -433,18 +498,9 @@ createServer(async (request, response) => {
       const result = await deleteUserAccount(request);
       return send(response, result.status, result.data);
     } catch (error) {
-      const missingCredentials = String(error?.message ?? '').includes(
-        'default credentials',
-      );
-      const message = missingCredentials
-        ? 'Firebase Admin credentials are not configured on the local server.'
-        : error?.code === 'auth/id-token-expired'
-          ? 'Your admin session expired. Sign in again and retry.'
-          : error?.code === 'auth/argument-error'
-            ? 'The admin session token is invalid. Sign in again and retry.'
-            : `The user account could not be deleted (${error?.code ?? 'server-error'}).`;
+      const failure = adminApiError(error);
       process.stderr.write(`Delete user failed: ${error?.stack ?? error}\n`);
-      return send(response, 500, { message });
+      return send(response, failure.status, { message: failure.message });
     }
   }
   if (request.method === 'POST' && request.url === '/quiz/evaluate') {
