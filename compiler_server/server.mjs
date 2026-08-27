@@ -386,8 +386,16 @@ async function verifyStudentId(request) {
   if (!identity.email_verified) {
     return { status: 403, data: { message: 'Verify your email before submitting a student ID.' } };
   }
-  const profileRef = db.collection('users').doc(identity.uid);
-  const profileDocument = await profileRef.get();
+  let profileRef = db.collection('users').doc(identity.uid);
+  let profileDocument = await profileRef.get();
+  if (!profileDocument.exists && identity.email) {
+    const emailRef = db.collection('users').doc(String(identity.email).trim().toLowerCase());
+    const emailDocument = await emailRef.get();
+    if (emailDocument.exists) {
+      profileRef = emailRef;
+      profileDocument = emailDocument;
+    }
+  }
   const profile = profileDocument.data() ?? {};
   if (!profileDocument.exists || String(profile.role ?? 'student').toLowerCase() !== 'student') {
     return { status: 403, data: { message: 'Student ID verification is only available to learner accounts.' } };
@@ -426,7 +434,7 @@ async function verifyStudentId(request) {
     if (hasPsuBranding && detectedProgram && numberMatches) {
       const idHash = createHash('sha256').update(studentNumber).digest('hex');
       const duplicate = await db.collection('users').where('schoolIdHash', '==', idHash).get();
-      if (duplicate.docs.some((document) => document.id !== identity.uid)) {
+      if (duplicate.docs.some((document) => document.id !== profileRef.id)) {
         verificationStatus = 'rejected';
         message = 'This student number is already linked to another CoSci account. Contact your CCS administrator.';
       } else {
@@ -443,6 +451,7 @@ async function verifyStudentId(request) {
 
     await profileRef.set({
       idVerificationStatus: verificationStatus,
+      id_verification_status: verificationStatus,
       schoolIdVerification: {
         status: verificationStatus,
         detectedProgram,
@@ -452,7 +461,17 @@ async function verifyStudentId(request) {
         reviewedAt: new Date(),
         method: 'server_ocr_rules',
       },
+      school_id_verification: {
+        status: verificationStatus,
+        detected_program: detectedProgram,
+        submitted_student_number: studentNumber,
+        psu_branding_detected: hasPsuBranding,
+        student_number_matched: numberMatches,
+        reviewed_at: new Date(),
+        method: 'server_ocr_rules',
+      },
       updatedAt: new Date(),
+      updated_at: new Date(),
     }, { merge: true });
     return { status: 200, data: { status: verificationStatus, message, detectedProgram } };
   } finally {
