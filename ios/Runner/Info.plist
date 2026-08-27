@@ -24,6 +24,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>CoSci uses the camera to capture the front of a PSU student ID for eligibility verification.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>CoSci uses a selected PSU student ID image for eligibility verification.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

@@ -23,6 +23,7 @@ import 'package:pseudocode_apk/features/auth/presentation/screens/get_started_sc
 import 'package:pseudocode_apk/features/auth/presentation/screens/login_screen.dart';
 import 'package:pseudocode_apk/features/auth/presentation/screens/register_screen.dart';
 import 'package:pseudocode_apk/features/auth/presentation/screens/account_verification_screen.dart';
+import 'package:pseudocode_apk/features/auth/presentation/screens/student_id_verification_screen.dart';
 import 'package:pseudocode_apk/features/code_simulation/presentation/screens/code_simulation_screen.dart';
 import 'package:pseudocode_apk/features/account/presentation/screens/account_screen.dart';
 import 'package:pseudocode_apk/features/dashboard/presentation/screens/dashboard_screen.dart';
@@ -58,6 +59,11 @@ class AppRouter {
       case AppRoutes.verifyEmail:
         return _build(
           AccountVerificationScreen(email: settings.arguments as String? ?? ''),
+          settings,
+        );
+      case AppRoutes.verifyStudentId:
+        return _build(
+          const SignedInGuard(child: StudentIdVerificationScreen()),
           settings,
         );
       case AppRoutes.forgotPassword:

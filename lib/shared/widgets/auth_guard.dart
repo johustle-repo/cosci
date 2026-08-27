@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:pseudocode_apk/features/auth/presentation/screens/login_screen.dart';
 import 'package:pseudocode_apk/features/auth/presentation/screens/account_verification_screen.dart';
+import 'package:pseudocode_apk/app/routes/app_routes.dart';
 import 'package:pseudocode_apk/features/auth/presentation/utils/role_redirect.dart';
 import 'package:pseudocode_apk/providers/auth_provider.dart';
 import 'package:pseudocode_apk/shared/widgets/loading_view.dart';
@@ -41,6 +42,20 @@ class _AuthGuardState extends State<AuthGuard> {
         }
 
         final user = authProvider.currentUser!;
+        if (user.requiresIdVerification) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                AppRoutes.verifyStudentId,
+                (route) => false,
+              );
+            }
+          });
+          return const LoadingView(
+            message: 'Opening student ID verification...',
+          );
+        }
         if (user.normalizedRole != widget.allowedRole) {
           // Admin user landed on a student route — redirect to admin panel.
           WidgetsBinding.instance.addPostFrameCallback((_) {

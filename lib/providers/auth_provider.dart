@@ -319,10 +319,12 @@ class AuthProvider extends ChangeNotifier {
     _notifySafely();
     try {
       final verified = await _authService!.refreshEmailVerification();
-      _status = AuthStatus.unauthenticated;
       if (verified) {
         _pendingVerificationEmail = null;
+        _currentUser = await _authService!.getCurrentUser();
+        _status = AuthStatus.authenticated;
       } else {
+        _status = AuthStatus.unauthenticated;
         _errorMessage =
             'Your email is not verified yet. Open the link in your inbox, then check again.';
       }

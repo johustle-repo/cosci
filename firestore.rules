@@ -12,12 +12,19 @@ service cloud.firestore {
     function admin() { return signedIn() && role() == 'admin'; }
     function instructor() { return signedIn() && role() in ['instructor', 'professor', 'teacher', 'faculty']; }
     function staff() { return admin() || instructor(); }
+    function verifiedLearner() {
+      return signedIn() && (
+        !('idVerificationStatus' in profile().data) ||
+        profile().data.idVerificationStatus in ['approved', 'legacy_approved', 'not_required']
+      );
+    }
     function validProgram(value) { return value in ['BS Information Technology', 'BS Computer Science', 'BS Mathematics-CIT']; }
     function validYear(value) { return value in ['1st Year', '2nd Year']; }
 
     match /users/{uid} {
       allow create: if own(uid) && request.resource.data.uid == uid &&
         request.resource.data.role == 'student' && request.resource.data.accountStatus == 'active' &&
+        request.resource.data.idVerificationStatus == 'required' &&
         validProgram(request.resource.data.program) && validYear(request.resource.data.yearLevel);
       allow read: if own(uid) || (signedIn() && resource.data.uid == request.auth.uid) || staff();
       allow update: if admin() || ((own(uid) || (signedIn() && resource.data.uid == request.auth.uid)) && request.resource.data.uid == resource.data.uid &&
@@ -73,7 +80,7 @@ service cloud.firestore {
       allow read, write: if admin();
     }
     match /{collection}/{document=**} {
-      allow read: if (signedIn() && collection in [
+      allow read: if ((verifiedLearner() || staff()) && collection in [
         'lessons', 'simulations', 'quizzes', 'puzzles', 'daily_challenges',
         'badge_definitions', 'announcements', 'gamification_rules'
       ]) || (staff() && collection in [

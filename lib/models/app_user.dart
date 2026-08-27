@@ -8,6 +8,7 @@ class AppUser {
     this.accountStatus = 'active',
     this.program,
     this.yearLevel,
+    this.idVerificationStatus,
   });
 
   final String uid;
@@ -18,6 +19,14 @@ class AppUser {
   final String accountStatus;
   final String? program;
   final String? yearLevel;
+  final String? idVerificationStatus;
+
+  String get normalizedIdVerificationStatus =>
+      (idVerificationStatus ?? 'legacy_approved').trim().toLowerCase();
+  bool get requiresIdVerification =>
+      isStudent &&
+      normalizedIdVerificationStatus != 'approved' &&
+      normalizedIdVerificationStatus != 'legacy_approved';
 
   String get normalizedRole {
     final value = role.trim().toLowerCase();
@@ -49,6 +58,7 @@ class AppUser {
       'accountStatus': accountStatus,
       'program': program,
       'yearLevel': yearLevel,
+      'idVerificationStatus': idVerificationStatus,
     };
   }
 
@@ -65,6 +75,7 @@ class AppUser {
           ((map['isActive'] as bool? ?? true) ? 'active' : 'suspended'),
       program: map['program'] as String? ?? map['course'] as String?,
       yearLevel: map['yearLevel'] as String? ?? map['year_level'] as String?,
+      idVerificationStatus: map['idVerificationStatus'] as String?,
     );
   }
 
@@ -77,6 +88,7 @@ class AppUser {
     String? accountStatus,
     String? program,
     String? yearLevel,
+    String? idVerificationStatus,
   }) {
     return AppUser(
       uid: uid ?? this.uid,
@@ -87,6 +99,7 @@ class AppUser {
       accountStatus: accountStatus ?? this.accountStatus,
       program: program ?? this.program,
       yearLevel: yearLevel ?? this.yearLevel,
+      idVerificationStatus: idVerificationStatus ?? this.idVerificationStatus,
     );
   }
 }

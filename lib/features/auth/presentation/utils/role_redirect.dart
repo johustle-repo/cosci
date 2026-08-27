@@ -4,6 +4,7 @@ import 'package:pseudocode_apk/features/admin/presentation/screens/admin_dashboa
 import 'package:pseudocode_apk/features/dashboard/presentation/screens/dashboard_screen.dart';
 import 'package:pseudocode_apk/features/professor/presentation/screens/professor_home_screen.dart';
 import 'package:pseudocode_apk/models/app_user.dart';
+import 'package:pseudocode_apk/features/auth/presentation/screens/student_id_verification_screen.dart';
 
 /// Central role-based routing helper.
 ///
@@ -23,6 +24,9 @@ class RoleRedirect {
       case 'instructor':
         return const ProfessorHomeScreen();
       case 'student':
+        if (user?.requiresIdVerification ?? false) {
+          return const StudentIdVerificationScreen();
+        }
         return const DashboardScreen();
       default:
         return const SizedBox.shrink();
@@ -34,6 +38,9 @@ class RoleRedirect {
     final role = user?.normalizedRole ?? '';
     if (role == 'admin') return AppRoutes.adminHome;
     if (role == 'instructor') return AppRoutes.professorHome;
+    if (user?.requiresIdVerification ?? false) {
+      return AppRoutes.verifyStudentId;
+    }
     return AppRoutes.dashboard;
   }
 }

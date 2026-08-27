@@ -160,6 +160,9 @@ class FirestoreService {
       'accountStatus': 'active',
       'program': user.program,
       'yearLevel': user.yearLevel,
+      'idVerificationStatus': user.isStudent
+          ? (user.idVerificationStatus ?? 'required')
+          : 'not_required',
       'createdAt': now,
       'updatedAt': now,
       'lastLoginAt': now,

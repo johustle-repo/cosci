@@ -242,7 +242,6 @@ class AuthService {
     if (user == null) return false;
     await user.reload();
     final verified = _firebaseAuth.currentUser?.emailVerified ?? false;
-    if (verified) await _firebaseAuth.signOut();
     return verified;
   }
 

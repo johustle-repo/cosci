@@ -5,6 +5,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import { applicationDefault, cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -351,17 +352,125 @@ async function evaluateQuiz(request) {
   };
 }
 
+function normalizedIdText(value) {
+  return String(value ?? '').toUpperCase()
+    .replace(/[–—]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function canonicalStudentNumber(value) {
+  return normalizedIdText(value).replace(/\s/g, '');
+}
+
+function detectEligibleProgram(text) {
+  if (/BS\s*(?:INFORMATION\s*TECHNOLOGY|IT)\b|\bBSIT\b/.test(text)) {
+    return 'BS Information Technology';
+  }
+  if (/BS\s*(?:COMPUTER\s*SCIENCE|CS)\b|\bBSCS\b/.test(text)) {
+    return 'BS Computer Science';
+  }
+  if (/BS\s*(?:MATHEMATICS|MATH)(?:\s*[-–]?\s*CIT)?\b/.test(text)) {
+    return 'BS Mathematics-CIT';
+  }
+  return null;
+}
+
+async function verifyStudentId(request) {
+  const authorization = request.headers.authorization || '';
+  if (!authorization.startsWith('Bearer ')) {
+    return { status: 401, data: { message: 'Authentication required.' } };
+  }
+  const { auth, db } = firebaseAdmin();
+  const identity = await auth.verifyIdToken(authorization.slice(7));
+  if (!identity.email_verified) {
+    return { status: 403, data: { message: 'Verify your email before submitting a student ID.' } };
+  }
+  const profileRef = db.collection('users').doc(identity.uid);
+  const profileDocument = await profileRef.get();
+  const profile = profileDocument.data() ?? {};
+  if (!profileDocument.exists || String(profile.role ?? 'student').toLowerCase() !== 'student') {
+    return { status: 403, data: { message: 'Student ID verification is only available to learner accounts.' } };
+  }
+
+  const payload = await readJson(request, 7_200_000);
+  const studentNumber = canonicalStudentNumber(payload.studentNumber);
+  if (!/^\d{2}-[A-Z]{2}-\d{4}$/.test(studentNumber)) {
+    return { status: 400, data: { message: 'Enter a valid PSU student number such as 23-LN-5223.' } };
+  }
+  const mimeType = String(payload.mimeType ?? '').toLowerCase();
+  if (!['image/jpeg', 'image/jpg', 'image/png'].includes(mimeType)) {
+    return { status: 400, data: { message: 'Upload a JPG or PNG image.' } };
+  }
+  const image = Buffer.from(String(payload.imageBase64 ?? ''), 'base64');
+  if (!image.length || image.length > 5_000_000) {
+    return { status: 400, data: { message: 'Upload a valid ID image smaller than 5 MB.' } };
+  }
+
+  const directory = await mkdtemp(join(jobsDirectory, 'cosci-id-'));
+  try {
+    const fileName = mimeType === 'image/png' ? 'student-id.png' : 'student-id.jpg';
+    await writeFile(join(directory, fileName), image);
+    const ocr = await run('tesseract', [fileName, 'stdout', '--psm', '6', '-l', 'eng'], directory);
+    if (ocr.code !== 0) {
+      return { status: 503, data: { message: 'The ID analyzer is temporarily unavailable. Please try again.' } };
+    }
+    const text = normalizedIdText(ocr.stdout);
+    const hasPsuBranding = /\bPSU\b|PANGASINAN\s+STATE\s+UNIVERSITY/.test(text);
+    const detectedProgram = detectEligibleProgram(text);
+    const detectedNumbers = text.match(/\d{2}\s*-\s*[A-Z]{2}\s*-\s*\d{4}/g) ?? [];
+    const numberMatches = detectedNumbers.some((number) => canonicalStudentNumber(number) === studentNumber);
+    let verificationStatus = 'resubmission_required';
+    let message = 'The image could not be read confidently. Retake it in good lighting with all four corners visible.';
+
+    if (hasPsuBranding && detectedProgram && numberMatches) {
+      const idHash = createHash('sha256').update(studentNumber).digest('hex');
+      const duplicate = await db.collection('users').where('schoolIdHash', '==', idHash).get();
+      if (duplicate.docs.some((document) => document.id !== identity.uid)) {
+        verificationStatus = 'rejected';
+        message = 'This student number is already linked to another CoSci account. Contact your CCS administrator.';
+      } else {
+        verificationStatus = 'approved';
+        message = `ID verified for ${detectedProgram}. Your learner workspace is ready.`;
+        await profileRef.set({ schoolIdHash: idHash }, { merge: true });
+      }
+    } else if (hasPsuBranding && !detectedProgram && /\bBS\s+[A-Z][A-Z ]{4,}/.test(text)) {
+      verificationStatus = 'rejected';
+      message = 'This ID does not show an eligible CCS program. CoSci is limited to BS Information Technology, BS Computer Science, and BS Mathematics-CIT learners.';
+    } else if (hasPsuBranding && detectedProgram && !numberMatches) {
+      message = 'The entered student number does not match the number read from the ID. Check the number or upload a clearer image.';
+    }
+
+    await profileRef.set({
+      idVerificationStatus: verificationStatus,
+      schoolIdVerification: {
+        status: verificationStatus,
+        detectedProgram,
+        submittedStudentNumber: studentNumber,
+        psuBrandingDetected: hasPsuBranding,
+        studentNumberMatched: numberMatches,
+        reviewedAt: new Date(),
+        method: 'server_ocr_rules',
+      },
+      updatedAt: new Date(),
+    }, { merge: true });
+    return { status: 200, data: { status: verificationStatus, message, detectedProgram } };
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
 function send(response, status, data) {
   response.writeHead(status, headers(response.requestOrigin));
   response.end(JSON.stringify(data));
 }
 
-async function readJson(request) {
+async function readJson(request, maxBytes = maxSourceBytes * 2) {
   const chunks = [];
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > maxSourceBytes * 2) throw new Error('Request is too large.');
+    if (size > maxBytes) throw new Error('Request is too large.');
     chunks.push(chunk);
   }
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
@@ -524,6 +633,19 @@ createServer(async (request, response) => {
           : 'Secure quiz grading could not be completed.';
       process.stderr.write(`Quiz evaluation failed: ${error?.stack ?? error}\n`);
       return send(response, 500, { message });
+    }
+  }
+  if (request.method === 'POST' && request.url === '/student/id/verify') {
+    try {
+      const result = await verifyStudentId(request);
+      return send(response, result.status, result.data);
+    } catch (error) {
+      process.stderr.write(`Student ID verification failed: ${error?.stack ?? error}\n`);
+      const failure = adminApiError(error, 'student');
+      const message = failure.status === 500
+        ? 'The ID analyzer could not complete this request. Please try again.'
+        : failure.message;
+      return send(response, failure.status, { message });
     }
   }
   if (request.method !== 'POST' || request.url !== '/api/v2/execute') {

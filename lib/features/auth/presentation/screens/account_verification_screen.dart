@@ -90,11 +90,13 @@ class _AccountVerificationScreenState extends State<AccountVerificationScreen> {
         .checkEmailVerification();
     if (!mounted || !verified) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Email verified. You can now sign in.')),
+      const SnackBar(
+        content: Text('Email verified. Complete your student ID verification.'),
+      ),
     );
     Navigator.pushNamedAndRemoveUntil(
       context,
-      AppRoutes.login,
+      AppRoutes.verifyStudentId,
       (route) => false,
     );
   }
