@@ -15,6 +15,17 @@ class AdminUserManagementService {
     defaultValue: '',
   );
 
+  static String get _resolvedEndpoint {
+    if (_configuredEndpoint.trim().isNotEmpty) {
+      return _configuredEndpoint.trim();
+    }
+    final host = Uri.base.host.toLowerCase();
+    final isLocal = host.isEmpty || host == 'localhost' || host == '127.0.0.1';
+    return isLocal
+        ? 'http://localhost:8787/admin/users/delete'
+        : 'https://cosci-compiler.onrender.com/admin/users/delete';
+  }
+
   Future<void> deleteUser(String uid) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) throw StateError('Sign in again before deleting a user.');
@@ -24,11 +35,7 @@ class AdminUserManagementService {
       throw StateError('Firebase project configuration is incomplete.');
     }
     final token = await user.getIdToken(true);
-    final endpoint = Uri.parse(
-      _configuredEndpoint.trim().isNotEmpty
-          ? _configuredEndpoint.trim()
-          : 'http://localhost:8787/admin/users/delete',
-    );
+    final endpoint = Uri.parse(_resolvedEndpoint);
     final client = _client ?? http.Client();
     try {
       final response = await client
@@ -52,8 +59,8 @@ class AdminUserManagementService {
       }
     } on http.ClientException {
       throw StateError(
-        'The local CoSci admin service is offline. Start it with '
-        '`npm.cmd run compiler:start`, then try again.',
+        'The CoSci account service is unavailable. Wait for the online '
+        'service to start, then try again.',
       );
     } on FormatException {
       throw StateError(

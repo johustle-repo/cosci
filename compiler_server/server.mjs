@@ -5,7 +5,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
+import { applicationDefault, cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 
@@ -77,7 +77,11 @@ function headers(requestOrigin = '') {
 
 function firebaseAdmin() {
   if (!getApps().length) {
-    initializeApp({ credential: applicationDefault() });
+    const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
+    const credential = serviceAccountJson
+      ? cert(JSON.parse(serviceAccountJson))
+      : applicationDefault();
+    initializeApp({ credential });
   }
   return { auth: getAuth(), db: getFirestore() };
 }
