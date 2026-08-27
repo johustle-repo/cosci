@@ -19,11 +19,7 @@ class AdminUserManagementService {
     if (_configuredEndpoint.trim().isNotEmpty) {
       return _configuredEndpoint.trim();
     }
-    final host = Uri.base.host.toLowerCase();
-    final isLocal = host.isEmpty || host == 'localhost' || host == '127.0.0.1';
-    return isLocal
-        ? 'http://localhost:8787/admin/users/delete'
-        : 'https://cosci-compiler.onrender.com/admin/users/delete';
+    return 'https://cosci-compiler.onrender.com/admin/users/delete';
   }
 
   Future<void> deleteUser(String uid) async {
