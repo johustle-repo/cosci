@@ -346,7 +346,9 @@ class AdminGenerationProvider extends ChangeNotifier {
       'To understand $topic, begin by identifying the problem it solves and the information the program must process. Connect each new rule to a small example, then predict what the program will do before running it. This prediction-and-check cycle helps separate syntax problems from mistakes in the planned logic.\n\nAs you study the example, trace values in order and explain why each statement is needed. Afterward, change one input or condition and predict the new result. This turns $topic from a definition into a technique you can reuse in larger $language programs.',
       minChars: 500,
     );
-    final code = value('sourceCode', _starterCode(language, topic));
+    final generatedCode = value('sourceCode', _starterCode(language, topic));
+    final code = _safeGeneratedCode(language, generatedCode, topic);
+    final codeWasReplaced = code != generatedCode;
 
     return {
       ...item,
@@ -411,7 +413,9 @@ class AdminGenerationProvider extends ChangeNotifier {
       'errorFocus': value('errorFocus', 'Concept'),
       'sourceCode': code,
       'standardInput': value('standardInput', ''),
-      'expectedOutput': value('expectedOutput', 'Lesson example: $topic'),
+      'expectedOutput': codeWasReplaced
+          ? 'Lesson example: $topic'
+          : value('expectedOutput', 'Lesson example: $topic'),
       'pseudocode': value('pseudocode', ''),
       'compilerValidated': false,
       'sortOrder': item['sortOrder'] is num
@@ -428,6 +432,20 @@ class AdminGenerationProvider extends ChangeNotifier {
     }
     if (language == 'JavaScript') return 'console.log("$message");';
     return '#include <iostream>\nusing namespace std;\n\nint main() {\n  cout << "$message" << endl;\n  return 0;\n}';
+  }
+
+  String _safeGeneratedCode(String language, String source, String topic) {
+    if (language != 'JavaScript') return source;
+    final lower = source.toLowerCase();
+    final usesUnsupportedFileApi =
+        lower.contains('mockfile') ||
+        RegExp(
+          r'(^|\n)\s*(await\s+)?using\s+[a-z_$][\w$]*\s*=',
+        ).hasMatch(source) ||
+        lower.contains('filesystemaccess') ||
+        lower.contains('showopenfilepicker') ||
+        lower.contains('showsavefilepicker');
+    return usesUnsupportedFileApi ? _starterCode(language, topic) : source;
   }
 
   Future<void> _finaliseJob({

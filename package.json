@@ -4,6 +4,7 @@
     "compiler:start": "node compiler_server/server.mjs",
     "dev:web": "node scripts/start_web_with_compiler.mjs",
     "compiler:docker": "docker compose -f docker-compose.compiler.yml up -d --build",
+    "repair:javascript-content": "node scripts/repair_unsafe_javascript_content.mjs",
     "test:firestore-rules": "firebase emulators:exec --only firestore --project psueducode-apk \"node --test test/firestore.rules.test.mjs\""
   },
   "devDependencies": {

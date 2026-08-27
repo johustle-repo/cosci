@@ -406,6 +406,8 @@ Requirements:
 - Make examples distinct across generated lessons and directly relevant to the selected topic.
 - sourceCode must be complete and runnable, and expectedOutput must exactly match it for the supplied standardInput.
 - Use only C++, Java, or JavaScript. Normalize C/C++ syllabus content to C++.
+- JavaScript programs run on Node.js. Use stable built-in APIs such as require('node:fs') or import from 'node:fs'. Never invent APIs such as MockFile and never use experimental resource-management syntax such as `using file = ...`.
+- For JavaScript file examples, prefer writeFileSync/readFileSync inside a try/finally block and remove temporary files when appropriate.
 - Prefer Concept for introductory theory; use Syntax, Logic, or Syntax and Logic when error detection is central.
 - Keep lessons as drafts. Compiler validation is performed by CoSci after generation.
 ''';
@@ -557,6 +559,7 @@ Keep executionSteps to 3-6 steps. lineIndex is 0-based into the code lines.
 variableStates shows ALL variables and their current values at that step.
 Fill every key with topic-specific content; never return placeholders such as concept1 or Concrete step 1.
 The program must be complete and runnable in C++, Java, or JavaScript. Normalize C/C++ content to C++.
+JavaScript runs on Node.js: use only stable built-in APIs. Never use MockFile, browser-only file APIs, or `using` declarations.
 Every test case must match the program exactly. Keep generated content as a draft with compilerValidated false.
 ''';
 }
