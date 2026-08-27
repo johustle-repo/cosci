@@ -203,12 +203,35 @@ class _LessonSimulationGeneratorDialog extends StatefulWidget {
 class _LessonSimulationGeneratorDialogState
     extends State<_LessonSimulationGeneratorDialog> {
   String? _lessonId;
+  String _language = 'C++';
   bool _isGenerating = false;
 
-  AdminSimulation _buildDraft(AdminLesson lesson) {
-    final output = lesson.expectedOutput.trim();
+  String _printProgram(String language, String output) {
+    final escaped = output
+        .replaceAll(r'\', r'\\')
+        .replaceAll('"', r'\"')
+        .replaceAll('\r', '')
+        .replaceAll('\n', r'\n');
+    return switch (language) {
+      'Java' =>
+        'public class Main {\n  public static void main(String[] args) {\n    System.out.println("$escaped");\n  }\n}',
+      'JavaScript' => 'console.log("$escaped");',
+      _ =>
+        '#include <iostream>\nusing namespace std;\n\nint main() {\n  cout << "$escaped" << endl;\n  return 0;\n}',
+    };
+  }
+
+  AdminSimulation _buildDraft(AdminLesson lesson, String language) {
+    final sameLanguage = lesson.language == language;
+    final fallbackOutput = 'Lesson example: ${lesson.topic}';
+    final output = sameLanguage && lesson.expectedOutput.trim().isNotEmpty
+        ? lesson.expectedOutput.trim()
+        : fallbackOutput;
+    final sourceCode = sameLanguage && lesson.sourceCode.trim().isNotEmpty
+        ? lesson.sourceCode
+        : _printProgram(language, output);
     final hasRunnableExample =
-        lesson.sourceCode.trim().isNotEmpty && output.isNotEmpty;
+        sourceCode.trim().isNotEmpty && output.isNotEmpty;
     final steps = lesson.algorithmSteps
         .asMap()
         .entries
@@ -226,11 +249,11 @@ class _LessonSimulationGeneratorDialogState
 
     return AdminSimulation(
       id: '',
-      title: '${lesson.title} — Interactive Simulation',
+      title: '${lesson.topic} in $language — Interactive Simulation',
       topic: lesson.topic,
-      language: lesson.language,
+      language: language,
       difficulty: lesson.difficulty,
-      codeSnippet: lesson.sourceCode,
+      codeSnippet: sourceCode,
       executionSteps: steps,
       expectedOutput: output,
       explanation: lesson.summary.trim().isNotEmpty
@@ -243,12 +266,12 @@ class _LessonSimulationGeneratorDialogState
       },
       isPublished: false,
       linkedLessonId: lesson.id,
-      stdin: lesson.standardInput,
+      stdin: sameLanguage ? lesson.standardInput : '',
       testCases: hasRunnableExample
           ? [
               SimulationTestCase(
                 name: 'Lesson example',
-                stdin: lesson.standardInput,
+                stdin: sameLanguage ? lesson.standardInput : '',
                 expectedOutput: output,
               ),
             ]
@@ -256,7 +279,7 @@ class _LessonSimulationGeneratorDialogState
       audiencePrograms: lesson.audiencePrograms,
       yearLevels: lesson.yearLevels,
       problemGoal: lesson.learningObjective,
-      inputsDescription: lesson.standardInput.trim().isEmpty
+      inputsDescription: !sameLanguage || lesson.standardInput.trim().isEmpty
           ? 'No standard input is required for the lesson example.'
           : 'Use the lesson standard input: ${lesson.standardInput.trim()}',
       algorithmSteps: lesson.algorithmSteps,
@@ -268,8 +291,9 @@ class _LessonSimulationGeneratorDialogState
         'Compare the variable state and output after every step.',
       ],
       errorFocus: focus,
-      compilerValidated: hasRunnableExample && lesson.compilerValidated,
-      compilerValidatedAt: hasRunnableExample
+      compilerValidated:
+          sameLanguage && hasRunnableExample && lesson.compilerValidated,
+      compilerValidatedAt: sameLanguage && hasRunnableExample
           ? lesson.compilerValidatedAt
           : null,
     );
@@ -278,7 +302,9 @@ class _LessonSimulationGeneratorDialogState
   Future<void> _generate(AdminLesson lesson) async {
     setState(() => _isGenerating = true);
     final provider = context.read<AdminSimulationsProvider>();
-    final created = await provider.createSimulation(_buildDraft(lesson));
+    final created = await provider.createSimulation(
+      _buildDraft(lesson, _language),
+    );
     if (!mounted) return;
     setState(() => _isGenerating = false);
     if (!created) {
@@ -370,9 +396,38 @@ class _LessonSimulationGeneratorDialogState
                       ),
                     )
                     .toList(),
-                onChanged: (value) => setState(() => _lessonId = value),
+                onChanged: (value) => setState(() {
+                  _lessonId = value;
+                  final lesson = lessons
+                      .where((candidate) => candidate.id == value)
+                      .firstOrNull;
+                  if (lesson != null) _language = lesson.language;
+                }),
               ),
             if (selectedLesson != null) ...[
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                key: ValueKey(_language),
+                initialValue: _language,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Programming language *',
+                  prefixIcon: Icon(Icons.code_rounded),
+                  helperText:
+                      'The runnable example and compiler test will use this language.',
+                ),
+                items: const ['C++', 'Java', 'JavaScript']
+                    .map(
+                      (language) => DropdownMenuItem(
+                        value: language,
+                        child: Text(language),
+                      ),
+                    )
+                    .toList(),
+                onChanged: _isGenerating
+                    ? null
+                    : (value) => setState(() => _language = value ?? 'C++'),
+              ),
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(16),
@@ -390,11 +445,13 @@ class _LessonSimulationGeneratorDialogState
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '${selectedLesson.language} • ${selectedLesson.difficulty} • ${selectedLesson.topic}',
+                      '$_language • ${selectedLesson.difficulty} • ${selectedLesson.topic}',
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      selectedLesson.sourceCode.trim().isEmpty
+                      selectedLesson.language != _language
+                          ? 'CoSci will create a safe $_language runnable example while preserving this lesson’s topic and learning guidance.'
+                          : selectedLesson.sourceCode.trim().isEmpty
                           ? 'The lesson has no runnable example yet. A structured draft will be created for completion.'
                           : 'The lesson code and expected output will become the first compiler test.',
                       style: const TextStyle(color: _textSub),
