@@ -361,7 +361,19 @@ function normalizedIdText(value) {
 }
 
 function canonicalStudentNumber(value) {
-  return normalizedIdText(value).replace(/\s/g, '');
+  const compact = normalizedIdText(value).replace(/[^A-Z0-9]/g, '');
+  const match = compact.match(/^(\d{2})([A-Z]{2})(\d{4})$/);
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : '';
+}
+
+function detectedStudentNumbers(text) {
+  const results = new Set();
+  const candidates = text.match(/\b\d{2}\s*[- ]?\s*[A-Z]{2}\s*[- ]?\s*\d{4}\b/g) ?? [];
+  for (const candidate of candidates) {
+    const normalized = canonicalStudentNumber(candidate);
+    if (normalized) results.add(normalized);
+  }
+  return [...results];
 }
 
 function detectEligibleProgram(text) {
@@ -403,9 +415,9 @@ async function verifyStudentId(request) {
   }
 
   const payload = await readJson(request, 7_200_000);
-  const studentNumber = canonicalStudentNumber(payload.studentNumber);
-  if (!/^\d{2}-[A-Z]{2}-\d{4}$/.test(studentNumber)) {
-    return { status: 400, data: { message: 'Enter a valid PSU student number such as 23-LN-5223.' } };
+  const enteredStudentNumber = canonicalStudentNumber(payload.studentNumber);
+  if (String(payload.studentNumber ?? '').trim() && !enteredStudentNumber) {
+    return { status: 400, data: { message: 'Check the student number, or leave it blank so CoSci can read it from the ID.' } };
   }
   const mimeType = String(payload.mimeType ?? '').toLowerCase();
   if (!['image/jpeg', 'image/jpg', 'image/png'].includes(mimeType)) {
@@ -463,12 +475,15 @@ async function verifyStudentId(request) {
     const text = normalizedIdText(ocr.stdout);
     const hasPsuBranding = /\bPSU\b|PANGASINAN\s+STATE\s+UNIVERSITY/.test(text);
     const detectedProgram = detectEligibleProgram(text);
-    const detectedNumbers = text.match(/\d{2}\s*-\s*[A-Z]{2}\s*-\s*\d{4}/g) ?? [];
-    const numberMatches = detectedNumbers.some((number) => canonicalStudentNumber(number) === studentNumber);
+    const detectedNumbers = detectedStudentNumbers(text);
+    const studentNumber = enteredStudentNumber || detectedNumbers[0] || '';
+    const numberMatches = Boolean(studentNumber) && (
+      !enteredStudentNumber || detectedNumbers.includes(enteredStudentNumber)
+    );
     let verificationStatus = 'resubmission_required';
     let message = 'The image could not be read confidently. Retake it in good lighting with all four corners visible.';
 
-    if (hasPsuBranding && detectedProgram && numberMatches) {
+    if (hasPsuBranding && detectedProgram && studentNumber && numberMatches) {
       const idHash = createHash('sha256').update(studentNumber).digest('hex');
       const duplicate = await db.collection('users').where('schoolIdHash', '==', idHash).get();
       if (duplicate.docs.some((document) => document.id !== profileRef.id)) {
@@ -482,8 +497,10 @@ async function verifyStudentId(request) {
     } else if (hasPsuBranding && !detectedProgram && /\bBS\s+[A-Z][A-Z ]{4,}/.test(text)) {
       verificationStatus = 'rejected';
       message = 'This ID does not show an eligible CCS program. CoSci is limited to BS Information Technology, BS Computer Science, and BS Mathematics-CIT learners.';
-    } else if (hasPsuBranding && detectedProgram && !numberMatches) {
+    } else if (hasPsuBranding && detectedProgram && enteredStudentNumber && !numberMatches) {
       message = 'The entered student number does not match the number read from the ID. Check the number or upload a clearer image.';
+    } else if (hasPsuBranding && detectedProgram && !studentNumber) {
+      message = 'Your PSU and CCS course were recognized. Enter the student number printed on the ID, then verify again.';
     }
 
     await profileRef.set({
@@ -492,7 +509,8 @@ async function verifyStudentId(request) {
       schoolIdVerification: {
         status: verificationStatus,
         detectedProgram,
-        submittedStudentNumber: studentNumber,
+        submittedStudentNumber: enteredStudentNumber || null,
+        detectedStudentNumber: detectedNumbers[0] || null,
         psuBrandingDetected: hasPsuBranding,
         studentNumberMatched: numberMatches,
         reviewedAt: new Date(),
@@ -501,7 +519,8 @@ async function verifyStudentId(request) {
       school_id_verification: {
         status: verificationStatus,
         detected_program: detectedProgram,
-        submitted_student_number: studentNumber,
+        submitted_student_number: enteredStudentNumber || null,
+        detected_student_number: detectedNumbers[0] || null,
         psu_branding_detected: hasPsuBranding,
         student_number_matched: numberMatches,
         reviewed_at: new Date(),
