@@ -4,6 +4,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         g++ \
         openjdk-17-jdk-headless \
+        imagemagick \
         tesseract-ocr \
         tesseract-ocr-eng \
     && tesseract --list-langs | grep -qx eng \
