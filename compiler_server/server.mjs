@@ -439,17 +439,24 @@ async function verifyStudentId(request) {
       );
     }
     if (ocr.code !== 0) {
-      const analyzerMissing = ocr.code === 127 || /not found|unavailable|enoent/i.test(ocr.stderr);
+      const analyzerMissing = ocr.code === 127 || /not found|unavailable|enoent|error opening data file|failed loading language/i.test(ocr.stderr);
+      const analyzerTimedOut = ocr.code === 124;
       process.stderr.write(
         `Student ID OCR failed (code ${ocr.code}): ${ocr.stderr || 'No diagnostic output.'}\n`,
       );
       return {
         status: 503,
         data: {
-          code: analyzerMissing ? 'id-analyzer-not-installed' : 'id-analyzer-timeout',
+          code: analyzerMissing
+            ? 'id-analyzer-not-installed'
+            : analyzerTimedOut
+              ? 'id-analyzer-timeout'
+              : 'id-analyzer-failed',
           message: analyzerMissing
             ? 'Student ID verification is being updated. Please try again shortly.'
-            : 'The ID photo took too long to read. Upload a clear, tightly cropped photo smaller than 5 MB and try again.',
+            : analyzerTimedOut
+              ? 'The ID photo took too long to read. Upload a clear, tightly cropped photo smaller than 5 MB and try again.'
+              : 'The ID photo could not be analyzed. Upload a clear JPG or PNG showing the complete card and try again.',
         },
       };
     }
