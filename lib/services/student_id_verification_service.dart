@@ -50,8 +50,15 @@ class StudentIdVerificationService {
             'studentNumber': studentNumber.trim().toUpperCase(),
           }),
         )
-        .timeout(const Duration(seconds: 45));
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+        .timeout(const Duration(seconds: 60));
+    Map<String, dynamic> data;
+    try {
+      data = jsonDecode(response.body) as Map<String, dynamic>;
+    } on FormatException {
+      throw StateError(
+        'The verification service returned an invalid response. Please try again.',
+      );
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['message'] as String? ?? 'ID verification failed.');
     }

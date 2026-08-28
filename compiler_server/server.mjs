@@ -14,6 +14,7 @@ const port = Number(process.env.PORT || 8787);
 const jobsDirectory = process.env.COSCI_JOBS_DIR || tmpdir();
 const maxSourceBytes = 50_000;
 const timeoutMs = 7_000;
+const ocrTimeoutMs = 35_000;
 const maxConcurrentJobs = 2;
 let activeJobs = 0;
 
@@ -419,9 +420,38 @@ async function verifyStudentId(request) {
   try {
     const fileName = mimeType === 'image/png' ? 'student-id.png' : 'student-id.jpg';
     await writeFile(join(directory, fileName), image);
-    const ocr = await run('tesseract', [fileName, 'stdout', '--psm', '6', '-l', 'eng'], directory);
+    let ocr = await run(
+      'tesseract',
+      [fileName, 'stdout', '--psm', '6', '-l', 'eng'],
+      directory,
+      '',
+      ocrTimeoutMs,
+    );
+    // IDs with reflective surfaces or unusually spaced text can produce no
+    // useful output in block mode. Retry once using sparse-text detection.
+    if (ocr.code === 0 && !normalizedIdText(ocr.stdout)) {
+      ocr = await run(
+        'tesseract',
+        [fileName, 'stdout', '--psm', '11', '-l', 'eng'],
+        directory,
+        '',
+        ocrTimeoutMs,
+      );
+    }
     if (ocr.code !== 0) {
-      return { status: 503, data: { message: 'The ID analyzer is temporarily unavailable. Please try again.' } };
+      const analyzerMissing = ocr.code === 127 || /not found|unavailable|enoent/i.test(ocr.stderr);
+      process.stderr.write(
+        `Student ID OCR failed (code ${ocr.code}): ${ocr.stderr || 'No diagnostic output.'}\n`,
+      );
+      return {
+        status: 503,
+        data: {
+          code: analyzerMissing ? 'id-analyzer-not-installed' : 'id-analyzer-timeout',
+          message: analyzerMissing
+            ? 'Student ID verification is being updated. Please try again shortly.'
+            : 'The ID photo took too long to read. Upload a clear, tightly cropped photo smaller than 5 MB and try again.',
+        },
+      };
     }
     const text = normalizedIdText(ocr.stdout);
     const hasPsuBranding = /\bPSU\b|PANGASINAN\s+STATE\s+UNIVERSITY/.test(text);
@@ -495,7 +525,7 @@ async function readJson(request, maxBytes = maxSourceBytes * 2) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-function run(command, args, cwd, stdin = '') {
+function run(command, args, cwd, stdin = '', executionTimeoutMs = timeoutMs) {
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd,
@@ -510,7 +540,7 @@ function run(command, args, cwd, stdin = '') {
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill('SIGKILL');
-    }, timeoutMs);
+    }, executionTimeoutMs);
     child.stdout.on('data', (data) => {
       if (stdout.length < maxSourceBytes) stdout += data.toString();
     });
