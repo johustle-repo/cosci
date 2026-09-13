@@ -244,7 +244,10 @@ class _CatalogState extends State<_Catalog> {
                       await Clipboard.setData(ClipboardData(text: item.id));
                       if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Content ID copied.')),
+                        const SnackBar(
+                          content: Text('Content ID copied.'),
+                          duration: Duration(seconds: 3),
+                        ),
                       );
                     },
                   ),

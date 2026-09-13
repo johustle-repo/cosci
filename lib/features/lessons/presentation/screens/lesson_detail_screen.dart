@@ -37,7 +37,7 @@ class LessonDetailScreen extends StatelessWidget {
         SnackBar(
           behavior: SnackBarBehavior.floating,
           backgroundColor: const Color(0xFF047857),
-          duration: const Duration(seconds: 5),
+          duration: const Duration(seconds: 3),
           content: Row(
             children: [
               const Icon(Icons.workspace_premium_rounded, color: Colors.white),

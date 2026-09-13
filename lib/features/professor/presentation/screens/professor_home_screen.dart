@@ -78,14 +78,20 @@ class _ProfessorHomeScreenState extends State<ProfessorHomeScreen> {
         feedback: feedback,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Feedback saved.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Feedback saved.'),
+          duration: Duration(seconds: 3),
+        ),
+      );
       _refresh();
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save feedback: $error')),
+        SnackBar(
+          content: Text('Could not save feedback: $error'),
+          duration: const Duration(seconds: 3),
+        ),
       );
     }
   }

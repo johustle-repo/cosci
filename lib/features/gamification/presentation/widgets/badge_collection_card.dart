@@ -394,6 +394,7 @@ class BadgeCollectionCard extends StatelessWidget {
                                           content: Text(
                                             'Certificate generated successfully.',
                                           ),
+                                          duration: Duration(seconds: 3),
                                         ),
                                       );
                                     }
@@ -409,6 +410,7 @@ class BadgeCollectionCard extends StatelessWidget {
                                           content: Text(
                                             'Certificate could not be generated. Please try again.',
                                           ),
+                                          duration: Duration(seconds: 3),
                                         ),
                                       );
                                     }

@@ -41,7 +41,7 @@ class _AccountVerificationScreenState extends State<AccountVerificationScreen> {
             ),
             backgroundColor: const Color(0xFF047857),
             behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 6),
+            duration: const Duration(seconds: 3),
           ),
         );
     });
@@ -92,6 +92,7 @@ class _AccountVerificationScreenState extends State<AccountVerificationScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Email verified. Complete your student ID verification.'),
+        duration: Duration(seconds: 3),
       ),
     );
     Navigator.pushNamedAndRemoveUntil(

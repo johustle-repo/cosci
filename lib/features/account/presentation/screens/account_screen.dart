@@ -315,6 +315,7 @@ class _AccountScreenState extends State<AccountScreen> {
       SnackBar(
         content: Text(text),
         backgroundColor: success ? const Color(0xFF047857) : null,
+        duration: const Duration(seconds: 3),
       ),
     );
   }

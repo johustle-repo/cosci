@@ -109,6 +109,7 @@ class _QuizPlayerScreenState extends State<QuizPlayerScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(error.toString().replaceFirst('Bad state: ', '')),
+            duration: const Duration(seconds: 3),
           ),
         );
         setState(() => _submitting = false);
@@ -150,9 +151,12 @@ class _QuizPlayerScreenState extends State<QuizPlayerScreen> {
     final gamification = context.read<GamificationProvider>();
     final message = gamification.errorMessage ?? gamification.statusMessage;
     if (message != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 

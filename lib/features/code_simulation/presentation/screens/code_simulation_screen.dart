@@ -105,9 +105,12 @@ class _CodeSimulationScreenState extends State<CodeSimulationScreen> {
     final gamification = context.read<GamificationProvider>();
     final message = gamification.errorMessage ?? gamification.statusMessage;
     if (message != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 
@@ -122,9 +125,12 @@ class _CodeSimulationScreenState extends State<CodeSimulationScreen> {
         ? '${provider.selectedLanguage.label} compiled and ran. Submit to verify the solution logic.'
         : '${provider.selectedLanguage.label} simulation found an issue.';
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   Future<void> _submitActivity() async {
@@ -142,6 +148,7 @@ class _CodeSimulationScreenState extends State<CodeSimulationScreen> {
             ? const Color(0xFF166534)
             : const Color(0xFFB45309),
         content: Text(provider.activityFeedback ?? 'Task submitted.'),
+        duration: const Duration(seconds: 3),
       ),
     );
 
@@ -824,6 +831,7 @@ class _CodeSimulationScreenState extends State<CodeSimulationScreen> {
                                               content: Text(
                                                 'Console output copied.',
                                               ),
+                                              duration: Duration(seconds: 3),
                                             ),
                                           );
                                         },

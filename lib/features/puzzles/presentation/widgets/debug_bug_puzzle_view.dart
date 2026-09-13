@@ -157,6 +157,7 @@ class _DebugBugPuzzleViewState extends State<DebugBugPuzzleView> {
                                 ? 'Bug identified correctly. Score: ${result.score}%'
                                 : 'Not quite right yet. Score: ${result.score}%',
                           ),
+                          duration: const Duration(seconds: 3),
                         ),
                       );
                       await PuzzlePlayerScreen.showRewardIfNeeded(context);

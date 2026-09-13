@@ -97,6 +97,7 @@ class _State extends State<AdminLessonGeneratorScreen> {
                 Navigator.pushNamed(context, AppRoutes.adminSettings),
           ),
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
         ),
       );
       return;
@@ -160,6 +161,7 @@ class _State extends State<AdminLessonGeneratorScreen> {
           '${generation.countFor('lessons')} lesson drafts created.',
         ),
         behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
       ),
     );
     Navigator.pushNamedAndRemoveUntil(
@@ -178,6 +180,7 @@ class _State extends State<AdminLessonGeneratorScreen> {
           content: Text(message),
           behavior: SnackBarBehavior.floating,
           backgroundColor: const Color(0xFFB42318),
+          duration: const Duration(seconds: 3),
         ),
       );
   }

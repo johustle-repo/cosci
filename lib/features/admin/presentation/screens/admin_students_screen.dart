@@ -548,6 +548,7 @@ class _StudentsTable extends StatelessWidget {
                               error ??
                                   '${s.displayName} was permanently deleted.',
                             ),
+                            duration: const Duration(seconds: 3),
                           ),
                         );
                       },

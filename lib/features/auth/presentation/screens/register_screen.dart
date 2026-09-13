@@ -137,7 +137,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ? const Color(0xFFB42318)
               : const Color(0xFF047857),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 6),
+          duration: const Duration(seconds: 3),
         ),
       );
   }

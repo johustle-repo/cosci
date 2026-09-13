@@ -913,6 +913,7 @@ class _UploadSyllabusDialogState extends State<_UploadSyllabusDialog> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
+          duration: const Duration(seconds: 3),
         ),
       );
     }

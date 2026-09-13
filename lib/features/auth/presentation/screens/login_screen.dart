@@ -60,9 +60,12 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     if (success) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Welcome back to CoSci.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Welcome back to CoSci.'),
+          duration: Duration(seconds: 3),
+        ),
+      );
       Navigator.pushNamedAndRemoveUntil(
         context,
         AppRoutes.startup,
@@ -81,6 +84,7 @@ class _LoginScreenState extends State<LoginScreen> {
               'Your account needs email verification. No additional email was sent automatically.',
             ),
             behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 3),
           ),
         );
       Navigator.pushNamedAndRemoveUntil(

@@ -103,6 +103,7 @@ class _AdminChallengesScreenState extends State<AdminChallengesScreen> {
               ? '$count ready-to-use daily challenges installed.'
               : provider.error ?? 'Could not install the starter plan.',
         ),
+        duration: const Duration(seconds: 3),
       ),
     );
   }

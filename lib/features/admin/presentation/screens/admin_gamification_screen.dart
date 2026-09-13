@@ -210,6 +210,7 @@ class _BadgesTab extends StatelessWidget {
               ? '${badges.length} learner badges are ready to earn.'
               : provider.error ?? 'Could not install starter badges.',
         ),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -906,6 +907,7 @@ class _XpRulesTab extends StatelessWidget {
               ? '$label settings are ready.'
               : provider.error ?? 'Could not save settings.',
         ),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -1045,6 +1047,7 @@ class _LevelThresholdsTab extends StatelessWidget {
               ? 'Balanced level progression installed.'
               : provider.error ?? 'Could not save levels.',
         ),
+        duration: const Duration(seconds: 3),
       ),
     );
   }

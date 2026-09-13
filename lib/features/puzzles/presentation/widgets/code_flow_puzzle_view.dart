@@ -255,6 +255,7 @@ class _CodeFlowPuzzleViewState extends State<CodeFlowPuzzleView> {
                                 ? 'Correct sequence. Score: ${result.score}%'
                                 : 'Sequence needs work. Score: ${result.score}%',
                           ),
+                          duration: const Duration(seconds: 3),
                         ),
                       );
                       await PuzzlePlayerScreen.showRewardIfNeeded(context);

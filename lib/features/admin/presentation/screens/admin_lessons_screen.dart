@@ -1044,6 +1044,7 @@ class _LessonRow extends StatelessWidget {
                                 content: Text(
                                   'Complete the lesson requirements before publishing.',
                                 ),
+                                duration: Duration(seconds: 3),
                               ),
                             )
                           : onToggle,
@@ -1723,6 +1724,7 @@ class _LessonFormDialogState extends State<_LessonFormDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Select at least one eligible program and year level.'),
+          duration: Duration(seconds: 3),
         ),
       );
       return;
@@ -1735,6 +1737,7 @@ class _LessonFormDialogState extends State<_LessonFormDialog> {
           content: Text(
             'Validate the code example before publishing this lesson.',
           ),
+          duration: Duration(seconds: 3),
         ),
       );
       return;

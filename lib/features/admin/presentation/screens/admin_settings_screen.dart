@@ -350,12 +350,18 @@ class _TopicsCardState extends State<_TopicsCard> {
     if (!mounted) return;
     if (added) {
       _ctrl.clear();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Topic "$text" added.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Topic "$text" added.'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('"$text" is already in the topic list.')),
+        SnackBar(
+          content: Text('"$text" is already in the topic list.'),
+          duration: const Duration(seconds: 3),
+        ),
       );
     }
   }
@@ -803,7 +809,10 @@ class _BackupRestoreCard extends StatelessWidget {
     final ok = await provider.createConfigurationBackup();
     if (ok && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Configuration backup stored.')),
+        const SnackBar(
+          content: Text('Configuration backup stored.'),
+          duration: Duration(seconds: 3),
+        ),
       );
     }
   }
@@ -832,7 +841,10 @@ class _BackupRestoreCard extends StatelessWidget {
     final ok = await provider.restoreConfigurationBackup(id);
     if (ok && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Configuration restored successfully.')),
+        const SnackBar(
+          content: Text('Configuration restored successfully.'),
+          duration: Duration(seconds: 3),
+        ),
       );
     }
   }
@@ -950,7 +962,10 @@ class _MaintenanceCardState extends State<_MaintenanceCard> {
   Future<void> _toggleMaintenance(bool enabled) async {
     if (enabled && _messageController.text.trim().length < 10) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add a clear maintenance message first.')),
+        const SnackBar(
+          content: Text('Add a clear maintenance message first.'),
+          duration: Duration(seconds: 3),
+        ),
       );
       return;
     }
@@ -989,7 +1004,10 @@ class _MaintenanceCardState extends State<_MaintenanceCard> {
     final message = _messageController.text.trim();
     if (message.length < 10) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('The maintenance message is too short.')),
+        const SnackBar(
+          content: Text('The maintenance message is too short.'),
+          duration: Duration(seconds: 3),
+        ),
       );
       return;
     }
@@ -999,7 +1017,10 @@ class _MaintenanceCardState extends State<_MaintenanceCard> {
     );
     if (ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Maintenance message saved.')),
+        const SnackBar(
+          content: Text('Maintenance message saved.'),
+          duration: Duration(seconds: 3),
+        ),
       );
     }
   }

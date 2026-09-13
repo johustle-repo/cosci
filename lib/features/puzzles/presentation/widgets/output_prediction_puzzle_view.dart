@@ -92,6 +92,7 @@ class _OutputPredictionPuzzleViewState
                                 ? 'Correct output. Score: ${result.score}%'
                                 : 'That output is incorrect. Score: ${result.score}%',
                           ),
+                          duration: const Duration(seconds: 3),
                         ),
                       );
                       await PuzzlePlayerScreen.showRewardIfNeeded(context);

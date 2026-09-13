@@ -313,6 +313,7 @@ class _LessonSimulationGeneratorDialogState
           content: Text(
             provider.error ?? 'The simulation draft could not be generated.',
           ),
+          duration: const Duration(seconds: 3),
         ),
       );
       provider.clearError();
@@ -325,6 +326,7 @@ class _LessonSimulationGeneratorDialogState
           'Simulation draft generated from “${lesson.title}”. Review and validate it before publishing.',
         ),
         backgroundColor: const Color(0xFF047857),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -894,9 +896,12 @@ class _SimulationsTable extends StatelessWidget {
               onToggle: () async {
                 await provider.togglePublished(s.id, !s.isPublished);
                 if (provider.error != null && context.mounted) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text(provider.error!)));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(provider.error!),
+                      duration: const Duration(seconds: 3),
+                    ),
+                  );
                   provider.clearError();
                 }
               },
@@ -1732,6 +1737,7 @@ class _SimulationFormDialogState extends State<_SimulationFormDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Select a lesson that is still available.'),
+          duration: Duration(seconds: 3),
         ),
       );
       return;
@@ -1740,6 +1746,7 @@ class _SimulationFormDialogState extends State<_SimulationFormDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Select at least one eligible program and year level.'),
+          duration: Duration(seconds: 3),
         ),
       );
       return;
@@ -1748,6 +1755,7 @@ class _SimulationFormDialogState extends State<_SimulationFormDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Select the lesson this simulation practices.'),
+          duration: Duration(seconds: 3),
         ),
       );
       return;
@@ -1761,6 +1769,7 @@ class _SimulationFormDialogState extends State<_SimulationFormDialog> {
             content: Text(
               'Cannot publish hidden tests until SIMULATION_EVALUATOR_URL is configured.',
             ),
+            duration: Duration(seconds: 3),
           ),
         );
         return;

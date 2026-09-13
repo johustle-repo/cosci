@@ -108,9 +108,12 @@ class _AdminQuizzesScreenState extends State<AdminQuizzesScreen> {
     await provider.loadQuestions(quiz.id);
     if (!context.mounted) return;
     if (provider.error != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(provider.error!)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(provider.error!),
+          duration: const Duration(seconds: 3),
+        ),
+      );
       provider.clearError();
       return;
     }
@@ -615,7 +618,10 @@ class _LessonQuizGeneratorDialogState
     setState(() => _isGenerating = false);
     if (!created) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(provider.error ?? 'Quiz generation failed.')),
+        SnackBar(
+          content: Text(provider.error ?? 'Quiz generation failed.'),
+          duration: const Duration(seconds: 3),
+        ),
       );
       provider.clearError();
       return;
@@ -627,6 +633,7 @@ class _LessonQuizGeneratorDialogState
           '${questions.length} multiple-choice questions were generated from “${lesson.title}”.',
         ),
         backgroundColor: const Color(0xFF047857),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
