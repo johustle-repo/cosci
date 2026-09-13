@@ -69,6 +69,7 @@ class LessonDetailScreen extends StatelessWidget {
       messenger.showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
           backgroundColor: provider.errorMessage == null
               ? const Color(0xFF123D9B)
               : const Color(0xFFB91C1C),
