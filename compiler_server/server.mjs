@@ -142,7 +142,12 @@ async function deleteUserAccount(request) {
       data: { message: 'You cannot delete your own administrator account.' },
     };
   }
-  const target = await db.collection('users').doc(targetUid).get();
+  let target = await db.collection('users').doc(targetUid).get();
+  if (!target.exists) {
+    const legacyMatch = await db.collection('users')
+      .where('uid', '==', targetUid).limit(1).get();
+    if (!legacyMatch.empty) target = legacyMatch.docs[0];
+  }
   if (!target.exists) {
     return { status: 404, data: { message: 'The user account no longer exists.' } };
   }
