@@ -7,6 +7,14 @@ import 'package:pseudocode_apk/app/routes/app_routes.dart';
 import 'package:pseudocode_apk/providers/auth_provider.dart';
 import 'package:pseudocode_apk/services/student_id_verification_service.dart';
 
+enum _Stage { capture, review, approved, rejected }
+
+const _eligiblePrograms = [
+  'BS Information Technology',
+  'BS Computer Science',
+  'BS Mathematics',
+];
+
 class StudentIdVerificationScreen extends StatefulWidget {
   const StudentIdVerificationScreen({super.key});
 
@@ -18,16 +26,23 @@ class StudentIdVerificationScreen extends StatefulWidget {
 class _StudentIdVerificationScreenState
     extends State<StudentIdVerificationScreen> {
   final _studentNumber = TextEditingController();
+  final _institution = TextEditingController();
+  final _studentName = TextEditingController();
+  final _program = TextEditingController();
   final _picker = ImagePicker();
+
   Uint8List? _image;
   String _mimeType = 'image/jpeg';
   String? _message;
-  String? _resultStatus;
   bool _busy = false;
+  _Stage _stage = _Stage.capture;
 
   @override
   void dispose() {
     _studentNumber.dispose();
+    _institution.dispose();
+    _studentName.dispose();
+    _program.dispose();
     super.dispose();
   }
 
@@ -53,7 +68,6 @@ class _StudentIdVerificationScreenState
                 ? 'image/png'
                 : 'image/jpeg');
         _message = null;
-        _resultStatus = null;
       });
     } catch (_) {
       if (!mounted) return;
@@ -61,12 +75,12 @@ class _StudentIdVerificationScreenState
         _message = source == ImageSource.camera
             ? 'Camera access was denied or unavailable. Allow camera access in your device settings, or upload from your gallery.'
             : 'Photo access was denied or unavailable. Allow photo access in your device settings and try again.';
-        _resultStatus = null;
       });
     }
   }
 
-  Future<void> _submit() async {
+  // Step: Upload ID → OCR: Convert ID Image to Text → Extract ID Information.
+  Future<void> _scan() async {
     final number = _studentNumber.text.trim().toUpperCase();
     if (number.isNotEmpty &&
         !RegExp(r'^\d{2}\s*-?\s*[A-Z]{2}\s*-?\s*\d{4}$').hasMatch(number)) {
@@ -88,52 +102,149 @@ class _StudentIdVerificationScreenState
       _message = null;
     });
     try {
-      final result = await const StudentIdVerificationService().verify(
+      final result = await const StudentIdVerificationService().scan(
         imageBytes: _image!,
         mimeType: _mimeType,
         studentNumber: number,
       );
       if (!mounted) return;
+      // Decision: "ID Information Read Clearly?" — always land on the
+      // review step so the student can correct any OCR mistake before the
+      // authoritative check runs on confirm. A scan never marks the account
+      // verified by itself.
+      _institution.text = result.fields.institution;
+      _studentName.text = result.fields.studentName;
+      _studentNumber.text = result.fields.studentNumber.isNotEmpty
+          ? result.fields.studentNumber
+          : number;
+      _program.text = result.normalizedProgram ?? result.fields.program;
       setState(() {
-        _resultStatus = result.status;
         _message = result.message;
+        _stage = _Stage.review;
       });
-      if (result.approved) {
-        await context.read<AuthProvider>().refreshSession();
-        if (!mounted) return;
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          AppRoutes.dashboard,
-          (_) => false,
-        );
-      }
     } catch (error) {
-      if (mounted) {
-        setState(
-          () => _message = error.toString().replaceFirst('Bad state: ', ''),
-        );
-      }
+      if (!mounted) return;
+      setState(() => _message = _cleanError(error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  StudentIdFields get _fields => StudentIdFields(
+    institution: _institution.text,
+    studentName: _studentName.text,
+    studentNumber: _studentNumber.text,
+    program: _program.text,
+  );
+
+  // Steps: ID Name Matches Registered Account Name? → Navigate to Student ID
+  // Verification Gate → Program Belongs to CCS? → Eligible Program? — all
+  // evaluated server-side by the confirm action in one authoritative call.
+  Future<void> _confirm() async {
+    if (_institution.text.trim().isEmpty ||
+        _studentName.text.trim().isEmpty ||
+        _studentNumber.text.trim().isEmpty ||
+        _program.text.trim().isEmpty) {
+      setState(
+        () => _message =
+            'Complete the institution, student name, student number, and program before verification.',
+      );
+      return;
+    }
+    if (_image == null) {
+      setState(
+        () => _message = 'The ID photo is missing. Scan the ID again.',
+      );
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      final result = await const StudentIdVerificationService().confirm(
+        imageBytes: _image!,
+        mimeType: _mimeType,
+        fields: _fields,
+      );
+      if (!mounted) return;
+
+      if (result.approved) {
+        // Step: Set Student Account Status to Verified (done server-side).
+        // Refresh so AuthProvider.currentUser reflects idVerificationStatus.
+        await context.read<AuthProvider>().refreshSession();
+        if (!mounted) return;
+        setState(() {
+          _message = result.message;
+          _stage = _Stage.approved;
+        });
+        return;
+      }
+
+      if (result.rejected) {
+        setState(() {
+          _program.text = result.normalizedProgram ?? _program.text;
+          _message = result.message;
+          _stage = _Stage.rejected;
+        });
+        return;
+      }
+
+      // reviewRequired: stay on the review step with the server's guidance
+      // (e.g. name mismatch, institution not confirmed, missing fields).
+      setState(() {
+        _message = result.message;
+        _stage = _Stage.review;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _message = _cleanError(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _reset() {
+    setState(() {
+      _stage = _Stage.capture;
+      _image = null;
+      _message = null;
+      _institution.clear();
+      _studentName.clear();
+      _studentNumber.clear();
+      _program.clear();
+    });
+  }
+
+  // Step: Navigate to Auth Gate → Navigate to Student Dashboard. AppRoutes
+  // .dashboard is wrapped by AuthGuard, which re-checks role and
+  // requiresIdVerification before rendering DashboardScreen — that is the
+  // "Auth Gate" in the flowchart, so no separate route is needed here.
+  void _continueToDashboard() {
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      AppRoutes.dashboard,
+      (_) => false,
+    );
+  }
+
+  Future<void> _signOut() => context.read<AuthProvider>().signOut();
+
+  String _cleanError(Object error) {
+    return error
+        .toString()
+        .replaceFirst('Bad state: ', '')
+        .replaceFirst('StateError: ', '')
+        .replaceFirst('Exception: ', '');
   }
 
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().currentUser;
     final wide = MediaQuery.sizeOf(context).width >= 920;
-    final form = _VerificationCard(
+    final card = _card(
       name: user?.displayName ?? 'Learner',
       program: user?.program ?? 'Program not set',
-      studentNumber: _studentNumber,
-      image: _image,
-      busy: _busy,
-      message: _message,
-      rejected: _resultStatus == 'rejected',
-      onCamera: () => _pick(ImageSource.camera),
-      onGallery: () => _pick(ImageSource.gallery),
-      onSubmit: _submit,
-      onSignOut: () => context.read<AuthProvider>().signOut(),
     );
     return Scaffold(
       backgroundColor: const Color(0xFFF3F7FD),
@@ -170,11 +281,11 @@ class _StudentIdVerificationScreenState
                                 ),
                               ),
                               const SizedBox(width: 24),
-                              Expanded(flex: 6, child: form),
+                              Expanded(flex: 6, child: card),
                             ],
                           ),
                         )
-                      : form,
+                      : card,
                 ),
               ),
             ),
@@ -183,37 +294,8 @@ class _StudentIdVerificationScreenState
       ),
     );
   }
-}
 
-class _VerificationCard extends StatelessWidget {
-  const _VerificationCard({
-    required this.name,
-    required this.program,
-    required this.studentNumber,
-    required this.image,
-    required this.busy,
-    required this.message,
-    required this.rejected,
-    required this.onCamera,
-    required this.onGallery,
-    required this.onSubmit,
-    required this.onSignOut,
-  });
-
-  final String name;
-  final String program;
-  final TextEditingController studentNumber;
-  final Uint8List? image;
-  final bool busy;
-  final String? message;
-  final bool rejected;
-  final VoidCallback onCamera;
-  final VoidCallback onGallery;
-  final VoidCallback onSubmit;
-  final VoidCallback onSignOut;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _card({required String name, required String program}) {
     return Container(
       padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 420 ? 18 : 24),
       decoration: BoxDecoration(
@@ -228,68 +310,84 @@ class _VerificationCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 220),
+        child: _content(name: name, program: program),
+      ),
+    );
+  }
+
+  Widget _content({required String name, required String program}) {
+    if (_stage == _Stage.approved) {
+      return _Outcome(
+        key: const ValueKey('approved'),
+        icon: Icons.verified_rounded,
+        color: const Color(0xFF079669),
+        title: 'Student ID Verified',
+        message:
+            _message ??
+            'Student ID verified. The student belongs to the College of Computing Sciences.',
+        details: {
+          'Name': _studentName.text,
+          'Student Number': _studentNumber.text,
+          'Program': _program.text,
+        },
+        primaryLabel: 'Continue',
+        onPrimary: _continueToDashboard,
+      );
+    }
+
+    if (_stage == _Stage.rejected) {
+      return _Outcome(
+        key: const ValueKey('rejected'),
+        icon: Icons.block_rounded,
+        color: const Color(0xFFD14343),
+        title: 'Student Not Eligible',
+        message:
+            _message ??
+            'This system is intended only for College of Computing Sciences students.',
+        details: {
+          'Detected Program': _program.text,
+          'Eligible Programs': _eligiblePrograms.join('\n'),
+        },
+        primaryLabel: 'Sign Out',
+        onPrimary: _signOut,
+      );
+    }
+
+    if (_stage == _Stage.review) {
+      return Column(
+        key: const ValueKey('review'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _Heading(),
-          const SizedBox(height: 20),
+          const _Heading(
+            title: 'Review extracted information',
+            subtitle: 'Correct any OCR mistakes before verification.',
+          ),
+          const SizedBox(height: 16),
           const _ProgressSteps(),
-          const SizedBox(height: 20),
-          _LearnerSummary(name: name, program: program),
           const SizedBox(height: 18),
-          const Text(
-            '1. Student number (optional)',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 9),
-          TextField(
-            controller: studentNumber,
-            enabled: !busy,
-            textCapitalization: TextCapitalization.characters,
-            decoration: InputDecoration(
-              hintText: 'We can read this from your ID',
-              prefixIcon: const Icon(Icons.numbers_rounded),
-              filled: true,
-              fillColor: const Color(0xFFF8FAFD),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(color: Color(0xFFD6E2F2)),
-              ),
-            ),
-          ),
-          const SizedBox(height: 18),
-          const Text(
-            '2. Add a clear photo of your ID',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 5),
-          const Text(
-            'Use the front of your ID. Keep PSU, your course, and student number visible.',
-            style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
-          ),
-          const SizedBox(height: 10),
-          _ImageArea(image: image, busy: busy, onTap: onGallery),
-          const SizedBox(height: 12),
-          _PickerButtons(busy: busy, onCamera: onCamera, onGallery: onGallery),
-          if (message != null) ...[
+          if (_image != null) ...[
+            _ImageArea(image: _image, busy: _busy, onTap: () {}),
             const SizedBox(height: 14),
-            _Feedback(message: message!, rejected: rejected),
           ],
-          const SizedBox(height: 18),
+          _field(_institution, 'Institution', Icons.account_balance_outlined),
+          _field(_studentName, 'Student Name', Icons.person_outline),
+          _field(_studentNumber, 'Student Number', Icons.numbers_rounded),
+          _field(_program, 'Program', Icons.school_outlined),
+          if (_message != null) _Feedback(message: _message!, rejected: false),
+          const SizedBox(height: 12),
           SizedBox(
             height: 50,
             child: FilledButton.icon(
-              onPressed: busy ? null : onSubmit,
+              onPressed: _busy ? null : _confirm,
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF1746A2),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
               ),
-              icon: busy
+              icon: _busy
                   ? const SizedBox.square(
                       dimension: 18,
                       child: CircularProgressIndicator(
@@ -298,36 +396,212 @@ class _VerificationCard extends StatelessWidget {
                       ),
                     )
                   : const Icon(Icons.verified_user_outlined),
-              label: Text(busy ? 'Reading your ID…' : 'Verify my ID'),
+              label: Text(_busy ? 'Verifying…' : 'Verify corrected information'),
             ),
           ),
-          const SizedBox(height: 11),
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.shield_outlined, size: 16, color: Color(0xFF64748B)),
-              SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  'Your image is used only for this eligibility check.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
-                ),
-              ),
-            ],
-          ),
           TextButton(
-            onPressed: busy ? null : onSignOut,
-            child: const Text('Sign out and use another account'),
+            onPressed: _busy ? null : _reset,
+            child: const Text('Scan Again'),
           ),
         ],
+      );
+    }
+
+    return Column(
+      key: const ValueKey('capture'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _Heading(
+          title: 'Student ID verification',
+          subtitle: 'Secure eligibility check • usually under a minute',
+        ),
+        const SizedBox(height: 20),
+        const _ProgressSteps(),
+        const SizedBox(height: 20),
+        _LearnerSummary(name: name, program: program),
+        const SizedBox(height: 18),
+        const Text(
+          '1. Student number (optional)',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 9),
+        TextField(
+          controller: _studentNumber,
+          enabled: !_busy,
+          textCapitalization: TextCapitalization.characters,
+          decoration: InputDecoration(
+            hintText: 'We can read this from your ID',
+            prefixIcon: const Icon(Icons.numbers_rounded),
+            filled: true,
+            fillColor: const Color(0xFFF8FAFD),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: Color(0xFFD6E2F2)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 18),
+        const Text(
+          '2. Add a clear photo of your ID',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 5),
+        const Text(
+          'Use the front of your ID. Keep PSU, your course, and student number visible.',
+          style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+        ),
+        const SizedBox(height: 10),
+        _ImageArea(image: _image, busy: _busy, onTap: () => _pick(ImageSource.gallery)),
+        const SizedBox(height: 12),
+        _PickerButtons(
+          busy: _busy,
+          onCamera: () => _pick(ImageSource.camera),
+          onGallery: () => _pick(ImageSource.gallery),
+        ),
+        if (_message != null) _Feedback(message: _message!, rejected: false),
+        const SizedBox(height: 18),
+        SizedBox(
+          height: 50,
+          child: FilledButton.icon(
+            onPressed: _busy ? null : _scan,
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF1746A2),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            icon: _busy
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.document_scanner_outlined),
+            label: Text(_busy ? 'Reading your ID…' : 'Read my ID'),
+          ),
+        ),
+        const SizedBox(height: 11),
+        const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.shield_outlined, size: 16, color: Color(0xFF64748B)),
+            SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                'Your image is used only for this eligibility check.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+        TextButton(
+          onPressed: _busy ? null : _signOut,
+          child: const Text('Sign out and use another account'),
+        ),
+      ],
+    );
+  }
+
+  Widget _field(TextEditingController controller, String label, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: controller,
+        enabled: !_busy,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon),
+          filled: true,
+          fillColor: const Color(0xFFF8FAFD),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+        ),
       ),
     );
   }
 }
 
+class _Outcome extends StatelessWidget {
+  const _Outcome({
+    super.key,
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.message,
+    required this.details,
+    required this.primaryLabel,
+    required this.onPrimary,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String message;
+  final Map<String, String> details;
+  final String primaryLabel;
+  final VoidCallback onPrimary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Icon(icon, size: 48, color: color),
+        const SizedBox(height: 12),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          message,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Color(0xFF60728E), height: 1.4),
+        ),
+        if (details.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          ...details.entries.map(
+            (entry) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    entry.key,
+                    style: const TextStyle(
+                      color: Color(0xFF60728E),
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    entry.value,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 12),
+        FilledButton(onPressed: onPrimary, child: Text(primaryLabel)),
+      ],
+    );
+  }
+}
+
 class _Heading extends StatelessWidget {
-  const _Heading();
+  const _Heading({required this.title, required this.subtitle});
+
+  final String title;
+  final String subtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -347,18 +621,18 @@ class _Heading extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 14),
-        const Expanded(
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Student ID verification',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                title,
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
               ),
-              SizedBox(height: 3),
+              const SizedBox(height: 3),
               Text(
-                'Secure eligibility check • usually under a minute',
-                style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+                subtitle,
+                style: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
               ),
             ],
           ),
@@ -397,10 +671,7 @@ class _LearnerSummary extends StatelessWidget {
                 Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
                 Text(
                   program,
-                  style: const TextStyle(
-                    color: Color(0xFF64748B),
-                    fontSize: 13,
-                  ),
+                  style: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
                 ),
               ],
             ),
@@ -413,11 +684,7 @@ class _LearnerSummary extends StatelessWidget {
 }
 
 class _ImageArea extends StatelessWidget {
-  const _ImageArea({
-    required this.image,
-    required this.busy,
-    required this.onTap,
-  });
+  const _ImageArea({required this.image, required this.busy, required this.onTap});
   final Uint8List? image;
   final bool busy;
   final VoidCallback onTap;
@@ -429,7 +696,7 @@ class _ImageArea extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
-        height: image == null ? 150 : 230,
+        height: image == null ? 150 : 200,
         decoration: BoxDecoration(
           color: const Color(0xFFF8FAFD),
           borderRadius: BorderRadius.circular(16),
@@ -554,25 +821,26 @@ class _Feedback extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = rejected ? const Color(0xFFBE123C) : const Color(0xFF805000);
-    return Container(
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: rejected ? const Color(0xFFFFE8EC) : const Color(0xFFFFF6E8),
-        borderRadius: BorderRadius.circular(13),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            rejected ? Icons.error_outline : Icons.info_outline,
-            size: 20,
-            color: color,
-          ),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Text(message, style: TextStyle(color: color)),
-          ),
-        ],
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Container(
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+          color: rejected ? const Color(0xFFFFE8EC) : const Color(0xFFFFF6E8),
+          borderRadius: BorderRadius.circular(13),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              rejected ? Icons.error_outline : Icons.info_outline,
+              size: 20,
+              color: color,
+            ),
+            const SizedBox(width: 9),
+            Expanded(child: Text(message, style: TextStyle(color: color))),
+          ],
+        ),
       ),
     );
   }
@@ -677,10 +945,7 @@ class _OverviewItem extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -707,11 +972,7 @@ class _ProgressSteps extends StatelessWidget {
 }
 
 class _Step extends StatelessWidget {
-  const _Step({
-    required this.label,
-    required this.number,
-    required this.complete,
-  });
+  const _Step({required this.label, required this.number, required this.complete});
   final String label;
   final String number;
   final bool complete;
@@ -737,10 +998,7 @@ class _Step extends StatelessWidget {
                 ),
         ),
         const SizedBox(height: 5),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-        ),
+        Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
       ],
     );
   }

@@ -612,18 +612,25 @@ async function verifyStudentId(request) {
       studentNumber: canonicalStudentNumber(corrected.studentNumber),
       program: String(corrected.program ?? '').trim(),
     };
+
+    // Decision: ID Information Read Clearly?
+    if (!confirmedFields.studentName || !confirmedFields.studentNumber || !confirmedFields.program) {
+      return { status: 200, data: { status: 'reviewRequired', normalizedProgram: null, message: "We could not clearly verify the student's name, student number, or program. Please review the extracted information or scan the ID again.", fields: confirmedFields } };
+    }
+    if (!hasPsuBranding || !/PANGASINAN\s+STATE\s+UNIVERSITY|\bPSU\b/i.test(confirmedFields.institution)) {
+      return { status: 200, data: { status: 'reviewRequired', normalizedProgram: null, message: 'The PSU institution could not be confirmed from this ID. Please scan the complete PSU ID again.', fields: confirmedFields } };
+    }
+
+    // Decision: ID Name Matches Registered Account Name?
+    if (!namesMatch(confirmedFields.studentName, profile.displayName)) {
+      return { status: 200, data: { status: 'reviewRequired', normalizedProgram: null, message: 'The name on the ID does not clearly match the registered learner name. Please review it or contact your CCS administrator.', fields: confirmedFields } };
+    }
+
+    // Navigate to Student ID Verification Gate: Program Belongs to the
+    // College of Computing Sciences? -> Eligible Program?
     const eligibility = evaluateCcsEligibility(confirmedFields.program);
     if (eligibility.status !== 'accepted') {
       return { status: 200, data: { ...eligibility, fields: confirmedFields } };
-    }
-    if (!hasPsuBranding || !/PANGASINAN\s+STATE\s+UNIVERSITY|\bPSU\b/i.test(confirmedFields.institution)) {
-      return { status: 200, data: { status: 'reviewRequired', normalizedProgram: eligibility.normalizedProgram, message: 'The PSU institution could not be confirmed from this ID. Please scan the complete PSU ID again.', fields: confirmedFields } };
-    }
-    if (!confirmedFields.studentName || !confirmedFields.studentNumber) {
-      return { status: 200, data: { status: 'reviewRequired', normalizedProgram: eligibility.normalizedProgram, message: "We could not clearly verify the student's name or student number. Please review the extracted information or scan the ID again.", fields: confirmedFields } };
-    }
-    if (!namesMatch(confirmedFields.studentName, profile.displayName)) {
-      return { status: 200, data: { status: 'reviewRequired', normalizedProgram: eligibility.normalizedProgram, message: 'The name on the ID does not clearly match the registered learner name. Please review it or contact your CCS administrator.', fields: confirmedFields } };
     }
     const registeredEligibility = evaluateCcsEligibility(profile.program);
     if (registeredEligibility.status !== 'accepted' || registeredEligibility.normalizedProgram !== eligibility.normalizedProgram) {
@@ -636,6 +643,7 @@ async function verifyStudentId(request) {
       return { status: 200, data: { status: 'rejected', normalizedProgram: eligibility.normalizedProgram, message: 'This student number is already linked to another CoSci account. Contact your CCS administrator.', fields: confirmedFields } };
     }
 
+    // Set Student Account Status to Verified.
     const verification = {
       status: 'approved',
       normalizedProgram: eligibility.normalizedProgram,
@@ -654,7 +662,11 @@ async function verifyStudentId(request) {
       updatedAt: new Date(),
       updated_at: new Date(),
     }, { merge: true });
-    return { status: 200, data: { ...eligibility, fields: { ...confirmedFields, program: eligibility.normalizedProgram } } };
+    // 'accepted' (from evaluateCcsEligibility) only means the detected
+    // program looks CCS-eligible; 'approved' is the distinct, authoritative
+    // status meaning every check passed and the account was just persisted
+    // as verified. The client's Navigate to Auth Gate step keys off this.
+    return { status: 200, data: { ...eligibility, status: 'approved', fields: { ...confirmedFields, program: eligibility.normalizedProgram } } };
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

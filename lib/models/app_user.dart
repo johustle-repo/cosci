@@ -21,10 +21,10 @@ class AppUser {
   final String? yearLevel;
   final String? idVerificationStatus;
 
-  // Student ID verification is temporarily bypassed: a verified email is
-  // enough to reach the dashboard. Flip this back to true to re-enable the
-  // verification gate.
-  static const bool idVerificationEnabled = false;
+  // Student ID verification gate. The scan/confirm flow in
+  // StudentIdVerificationScreen now correctly persists an 'approved' status
+  // via the server, so the gate is safe to enforce again.
+  static const bool idVerificationEnabled = true;
 
   String get normalizedIdVerificationStatus =>
       (idVerificationStatus ?? 'legacy_approved').trim().toLowerCase();
