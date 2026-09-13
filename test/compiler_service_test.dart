@@ -71,52 +71,6 @@ void main() {
     expect(result.message, contains('line 8'));
   });
 
-  test('classifies a compile timeout separately from syntax errors', () async {
-    final service = CompilerService(
-      endpoint: 'https://compiler.test/execute',
-      client: MockClient(
-        (_) async => http.Response(
-          jsonEncode({
-            'compile': {'code': 124, 'stderr': 'Execution timed out.'},
-          }),
-          200,
-        ),
-      ),
-    );
-
-    final result = await service.execute(
-      language: ProgrammingLanguage.java,
-      sourceCode: 'public class Main {}',
-    );
-
-    expect(result.status, ExecutionStatus.timedOut);
-    expect(result.categoryLabel, 'Execution timed out');
-    expect(result.learnerExplanation, contains('infinite loop'));
-  });
-
-  test('classifies a run timeout separately from runtime errors', () async {
-    final service = CompilerService(
-      endpoint: 'https://compiler.test/execute',
-      client: MockClient(
-        (_) async => http.Response(
-          jsonEncode({
-            'compile': {'code': 0, 'stderr': ''},
-            'run': {'code': 124, 'stderr': 'Execution timed out.'},
-          }),
-          200,
-        ),
-      ),
-    );
-
-    final result = await service.execute(
-      language: ProgrammingLanguage.java,
-      sourceCode: 'public class Main {}',
-    );
-
-    expect(result.status, ExecutionStatus.timedOut);
-    expect(result.message, contains('stopped safely'));
-  });
-
   test('reports compiler runtime health', () async {
     final service = CompilerService(
       endpoint: 'https://compiler.test/api/v2/execute',

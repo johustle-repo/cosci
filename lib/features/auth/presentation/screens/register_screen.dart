@@ -198,7 +198,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   const [
                         'BS Information Technology',
                         'BS Computer Science',
-                        'BS Mathematics',
+                        'BS Mathematics-CIT',
                       ]
                       .map(
                         (value) => DropdownMenuItem(

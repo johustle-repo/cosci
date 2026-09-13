@@ -21,21 +21,12 @@ class AppUser {
   final String? yearLevel;
   final String? idVerificationStatus;
 
-  // Student ID verification is temporarily disabled: a verified email is
-  // enough to reach the dashboard. Flip this back to true to re-enable the
-  // verification gate.
-  static const bool idVerificationEnabled = false;
-
   String get normalizedIdVerificationStatus =>
       (idVerificationStatus ?? 'legacy_approved').trim().toLowerCase();
   bool get requiresIdVerification =>
-      idVerificationEnabled &&
       isStudent &&
-      !const {
-        'approved',
-        'legacy_approved',
-        'not_required',
-      }.contains(normalizedIdVerificationStatus);
+      normalizedIdVerificationStatus != 'approved' &&
+      normalizedIdVerificationStatus != 'legacy_approved';
 
   String get normalizedRole {
     final value = role.trim().toLowerCase();

@@ -7,7 +7,6 @@ import 'package:pseudocode_apk/providers/simulation_provider.dart';
 import 'package:pseudocode_apk/providers/lessons_provider.dart';
 import 'package:pseudocode_apk/app/routes/app_routes.dart';
 import 'package:pseudocode_apk/shared/widgets/app_scaffold.dart';
-import 'package:pseudocode_apk/services/instruction_step_formatter.dart';
 
 class LessonDetailScreen extends StatelessWidget {
   const LessonDetailScreen({super.key, required this.lesson});
@@ -100,28 +99,36 @@ class LessonDetailScreen extends StatelessWidget {
       body: CustomScrollView(
         slivers: [
           // ── Hero app bar ────────────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF081B3D), Color(0xFF123C81)],
+          SliverAppBar(
+            expandedHeight: isDesktop ? 286 : (width < 600 ? 240 : 220),
+            pinned: false,
+            toolbarHeight: 0,
+            automaticallyImplyLeading: false,
+            backgroundColor: const Color(0xFF081B3D),
+            foregroundColor: Colors.white,
+            flexibleSpace: FlexibleSpaceBar(
+              background: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF081B3D), Color(0xFF123C81)],
+                  ),
                 ),
-              ),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1240),
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      width < 600 ? 16 : 28,
-                      width < 600 ? 24 : 34,
-                      width < 600 ? 16 : 28,
-                      width < 600 ? 24 : 34,
-                    ),
-                    child: _LessonHeroContent(
-                      lesson: lesson,
-                      isDesktop: isDesktop,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1240),
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        width < 600 ? 16 : 28,
+                        width < 600 ? 66 : 82,
+                        width < 600 ? 16 : 28,
+                        width < 600 ? 22 : 34,
+                      ),
+                      child: _LessonHeroContent(
+                        lesson: lesson,
+                        isDesktop: isDesktop,
+                      ),
                     ),
                   ),
                 ),
@@ -249,9 +256,7 @@ class LessonDetailScreen extends StatelessWidget {
                         _ListCard(
                           icon: Icons.format_list_numbered_rounded,
                           title: 'How the Algorithm Works',
-                          items: InstructionStepFormatter.format(
-                            lesson.algorithmSteps,
-                          ),
+                          items: lesson.algorithmSteps,
                           numbered: true,
                         ),
                         const SizedBox(height: 14),
@@ -326,10 +331,26 @@ class LessonDetailScreen extends StatelessWidget {
                       // Topic & meta
                       if (lesson.topic.isNotEmpty) ...[
                         _Card(
-                          child: _LessonMetadata(
-                            topic: lesson.topic,
-                            difficulty: lesson.difficulty,
-                            duration: '${lesson.estimatedMinutes} min',
+                          child: Row(
+                            children: [
+                              _MetaTile(
+                                icon: Icons.topic_rounded,
+                                label: 'Topic',
+                                value: lesson.topic,
+                              ),
+                              const SizedBox(width: 24),
+                              _MetaTile(
+                                icon: Icons.bar_chart_rounded,
+                                label: 'Difficulty',
+                                value: lesson.difficulty,
+                              ),
+                              const SizedBox(width: 24),
+                              _MetaTile(
+                                icon: Icons.timer_outlined,
+                                label: 'Duration',
+                                value: '${lesson.estimatedMinutes} min',
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 14),
@@ -401,6 +422,8 @@ class _LessonHeroContent extends StatelessWidget {
         const SizedBox(height: 8),
         Text(
           lesson.title,
+          maxLines: isDesktop ? 2 : 3,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: Colors.white,
             height: 1.12,
@@ -627,17 +650,33 @@ class _CodeCard extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
+        Row(
           children: [
-            const _SectionTitle(
-              icon: Icons.code_rounded,
-              title: 'Runnable Code Example',
+            const Expanded(
+              child: _SectionTitle(
+                icon: Icons.code_rounded,
+                title: 'Runnable Code Example',
+              ),
             ),
-            if (lesson.compilerValidated) const _CompilerValidatedLabel(),
+            if (lesson.compilerValidated)
+              const Row(
+                children: [
+                  Icon(
+                    Icons.verified_rounded,
+                    size: 16,
+                    color: Color(0xFF059669),
+                  ),
+                  SizedBox(width: 4),
+                  Text(
+                    'Compiler validated',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF047857),
+                    ),
+                  ),
+                ],
+              ),
           ],
         ),
         const SizedBox(height: 12),
@@ -744,10 +783,9 @@ class _Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isCompact = MediaQuery.sizeOf(context).width < 380;
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(isCompact ? 14 : 18),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -790,27 +828,6 @@ class _SectionTitle extends StatelessWidget {
       ],
     );
   }
-}
-
-class _CompilerValidatedLabel extends StatelessWidget {
-  const _CompilerValidatedLabel();
-
-  @override
-  Widget build(BuildContext context) => const Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Icon(Icons.verified_rounded, size: 16, color: Color(0xFF059669)),
-      SizedBox(width: 4),
-      Text(
-        'Compiler validated',
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: Color(0xFF047857),
-        ),
-      ),
-    ],
-  );
 }
 
 class _ConceptChip extends StatelessWidget {
@@ -873,62 +890,6 @@ class _MetaTile extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _LessonMetadata extends StatelessWidget {
-  const _LessonMetadata({
-    required this.topic,
-    required this.difficulty,
-    required this.duration,
-  });
-
-  final String topic;
-  final String difficulty;
-  final String duration;
-
-  @override
-  Widget build(BuildContext context) {
-    final tiles = <Widget>[
-      _MetaTile(icon: Icons.topic_rounded, label: 'Topic', value: topic),
-      _MetaTile(
-        icon: Icons.bar_chart_rounded,
-        label: 'Difficulty',
-        value: difficulty,
-      ),
-      _MetaTile(icon: Icons.timer_outlined, label: 'Duration', value: duration),
-    ];
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 620) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var index = 0; index < tiles.length; index++) ...[
-                tiles[index],
-                if (index < tiles.length - 1)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Divider(height: 1),
-                  ),
-              ],
-            ],
-          );
-        }
-
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(flex: 2, child: tiles[0]),
-            const SizedBox(width: 24),
-            Expanded(child: tiles[1]),
-            const SizedBox(width: 24),
-            Expanded(child: tiles[2]),
-          ],
-        );
-      },
     );
   }
 }

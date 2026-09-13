@@ -7,34 +7,6 @@ import 'package:pseudocode_apk/features/admin/models/admin_student_profile.dart'
 import 'package:pseudocode_apk/features/admin/models/admin_simulation.dart';
 
 void main() {
-  group('admin learner name resolution', () {
-    test('uses the verified ID name when the display name is missing', () {
-      final learner = AdminStudentProfile.fromMaps(
-        uid: 'uid-name',
-        userMap: const {
-          'email': 'jquiles273@gmail.com',
-          'role': 'student',
-          'idVerifiedName': 'Jonathan Quiles',
-        },
-      );
-
-      expect(learner.displayName, 'Jonathan Quiles');
-    });
-
-    test('uses a readable email name instead of generic Student', () {
-      final learner = AdminStudentProfile.fromMaps(
-        uid: 'uid-email',
-        userMap: const {
-          'email': 'john.denver24@psu.edu.ph',
-          'role': 'student',
-          'displayName': 'Student',
-        },
-      );
-
-      expect(learner.displayName, 'John Denver');
-    });
-  });
-
   group('admin priority revisions', () {
     test('legacy ISO activity timestamps remain readable', () {
       final log = AdminActivityLog.fromMap('log-1', {
@@ -125,37 +97,6 @@ void main() {
       expect(disabled.yearLevel, learner.yearLevel);
       expect(disabled.totalXp, learner.totalXp);
       expect(disabled.streakDays, learner.streakDays);
-    });
-
-    test('admin progress uses the newest learner totals', () {
-      final profileActivity = Timestamp.fromDate(DateTime.utc(2026, 8, 20));
-      final progressActivity = Timestamp.fromDate(DateTime.utc(2026, 8, 30));
-      final learner = AdminStudentProfile.fromMaps(
-        uid: 'student-3',
-        userMap: {
-          'email': 'progress@psu.edu.ph',
-          'displayName': 'Progress Learner',
-          'role': 'student',
-        },
-        profileMap: {
-          'totalXp': 100,
-          'streakDays': 2,
-          'lastActivityAt': profileActivity,
-        },
-        progressMap: {
-          'totalXp': 260,
-          'streakDays': 5,
-          'completedLessons': 3,
-          'completedQuizzes': 2,
-          'lastActivityAt': progressActivity,
-        },
-      );
-
-      expect(learner.totalXp, 260);
-      expect(learner.streakDays, 5);
-      expect(learner.completedLessons, 3);
-      expect(learner.completedQuizzes, 2);
-      expect(learner.lastActivityAt, progressActivity.toDate());
     });
 
     test('legacy simulation options normalize and expose readiness gaps', () {

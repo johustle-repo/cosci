@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:pseudocode_apk/services/instruction_step_formatter.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:pseudocode_apk/features/gamification/presentation/widgets/activity_gamification_card.dart';
@@ -312,10 +311,34 @@ class _CodeSimulationScreenState extends State<CodeSimulationScreen> {
             const SizedBox(height: 18),
           ],
           if (simulationProvider.compilerHealth != CompilerHealth.online) ...[
-            _CompilerAvailabilityCard(
-              health: simulationProvider.compilerHealth,
-              onRetry: () =>
-                  context.read<SimulationProvider>().refreshCompilerHealth(),
+            Card(
+              color: const Color(0xFFFFF7ED),
+              child: ListTile(
+                leading: const Icon(
+                  Icons.cloud_off_rounded,
+                  color: Color(0xFFB45309),
+                ),
+                title: Text(switch (simulationProvider.compilerHealth) {
+                  CompilerHealth.notConfigured => 'Compiler setup required',
+                  CompilerHealth.offline => 'Compiler service unavailable',
+                  CompilerHealth.checking => 'Checking compiler service',
+                  CompilerHealth.online => 'Compiler online',
+                }),
+                subtitle: const Text(
+                  'You can still press Run Code to test the connection and see a specific recovery message. Submission becomes available after a successful compiler connection.',
+                ),
+                trailing: TextButton.icon(
+                  onPressed:
+                      simulationProvider.compilerHealth ==
+                          CompilerHealth.checking
+                      ? null
+                      : () => context
+                            .read<SimulationProvider>()
+                            .refreshCompilerHealth(),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Retry'),
+                ),
+              ),
             ),
             const SizedBox(height: 18),
           ],
@@ -1186,87 +1209,6 @@ class _LanguageGroupSelector extends StatelessWidget {
   }
 }
 
-class _CompilerAvailabilityCard extends StatelessWidget {
-  const _CompilerAvailabilityCard({
-    required this.health,
-    required this.onRetry,
-  });
-
-  final CompilerHealth health;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final title = switch (health) {
-      CompilerHealth.notConfigured => 'Compiler setup required',
-      CompilerHealth.offline => 'Compiler service unavailable',
-      CompilerHealth.checking => 'Checking compiler service',
-      CompilerHealth.online => 'Compiler online',
-    };
-    final retry = TextButton.icon(
-      onPressed: health == CompilerHealth.checking ? null : onRetry,
-      icon: const Icon(Icons.refresh_rounded),
-      label: const Text('Retry'),
-    );
-    const description = Text(
-      'You can still press Run Code to test the connection and see a specific recovery message. Submission becomes available after a successful compiler connection.',
-      style: TextStyle(height: 1.45),
-    );
-    final heading = Row(
-      children: [
-        const Icon(Icons.cloud_off_rounded, color: Color(0xFFB45309)),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-        ),
-      ],
-    );
-
-    return Card(
-      color: const Color(0xFFFFF7ED),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          if (constraints.maxWidth < 560) {
-            return Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  heading,
-                  const SizedBox(height: 10),
-                  description,
-                  const SizedBox(height: 6),
-                  Align(alignment: Alignment.centerRight, child: retry),
-                ],
-              ),
-            );
-          }
-
-          return Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [heading, const SizedBox(height: 6), description],
-                  ),
-                ),
-                const SizedBox(width: 18),
-                retry,
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
 class _AlgorithmPanel extends StatelessWidget {
   const _AlgorithmPanel({required this.activity});
   final CodeSimulationActivity activity;
@@ -1299,9 +1241,7 @@ class _AlgorithmPanel extends StatelessWidget {
         ],
         if (activity.algorithmSteps.isNotEmpty) ...[
           const SizedBox(height: 10),
-          ...InstructionStepFormatter.format(
-            activity.algorithmSteps,
-          ).asMap().entries.map(
+          ...activity.algorithmSteps.asMap().entries.map(
             (entry) => Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Text('${entry.key + 1}. ${entry.value}'),

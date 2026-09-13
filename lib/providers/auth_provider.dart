@@ -410,22 +410,6 @@ class AuthProvider extends ChangeNotifier {
     );
   }
 
-  Future<bool> completeStudentIdVerification({
-    required String institution,
-    required String studentName,
-    required String studentNumber,
-    required String normalizedProgram,
-  }) {
-    return _performAuthAction(
-      () => _authService!.completeStudentIdVerification(
-        institution: institution,
-        studentName: studentName,
-        studentNumber: studentNumber,
-        normalizedProgram: normalizedProgram,
-      ),
-    );
-  }
-
   Future<bool> _performVoidAction(Future<void> Function() action) async {
     if (_authService == null) return false;
     _status = AuthStatus.loading;
@@ -458,12 +442,6 @@ class AuthProvider extends ChangeNotifier {
     _notifySafely();
   }
 
-  // Deliberately does not set AuthStatus.loading: both callers run while
-  // already authenticated, and screens that invoke them are wrapped in
-  // SignedInGuard/AuthGuard, whose Consumer<AuthProvider> swaps in a
-  // LoadingView (disposing the calling screen) whenever isLoading flips true.
-  // That previously discarded in-flight navigation, e.g. after student ID
-  // verification succeeded. Callers already show their own busy indicator.
   Future<bool> _performAuthAction(Future<AppUser> Function() action) async {
     if (_authService == null) {
       _status = AuthStatus.error;
@@ -472,7 +450,9 @@ class AuthProvider extends ChangeNotifier {
       return false;
     }
 
+    _status = AuthStatus.loading;
     _errorMessage = null;
+    _notifySafely();
 
     try {
       _currentUser = await action();
@@ -541,11 +521,6 @@ class AuthProvider extends ChangeNotifier {
         return error.message ?? 'This account cannot sign in.';
       case 'verification-session-expired':
         return error.message ?? 'Sign in to request another verification link.';
-      case 'student-name-mismatch':
-      case 'student-id-already-used':
-      case 'invalid-student-number':
-      case 'id-verification-save-failed':
-        return error.message ?? 'The student ID could not be verified.';
       case 'verification-send-failed':
         return 'Firebase could not send the verification email. Check your connection and try Resend.';
       case 'network-request-failed':

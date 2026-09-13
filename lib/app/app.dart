@@ -15,7 +15,7 @@ class PsuEduCodeApp extends StatefulWidget {
 }
 
 class _PsuEduCodeAppState extends State<PsuEduCodeApp> {
-  late final Future<void> _startupFuture;
+  late final Future<String?> _startupFuture;
 
   @override
   void initState() {
@@ -23,19 +23,18 @@ class _PsuEduCodeAppState extends State<PsuEduCodeApp> {
     _startupFuture = _initializeFirebase();
   }
 
-  Future<void> _initializeFirebase() async {
+  Future<String?> _initializeFirebase() async {
     try {
       await FirebaseInitializer.ensureInitialized();
-    } catch (_) {
-      // Firebase availability must not replace the application with a fatal
-      // startup screen. Feature-level flows provide actionable feedback when
-      // a specific service is unavailable.
+      return null;
+    } catch (error) {
+      return error.toString();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<void>(
+    return FutureBuilder<String?>(
       future: _startupFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
@@ -52,7 +51,7 @@ class _PsuEduCodeAppState extends State<PsuEduCodeApp> {
           );
         }
 
-        const appRouter = AppRouter();
+        final appRouter = AppRouter(startupError: snapshot.data);
 
         return MultiProvider(
           providers: AppProviders.providers,

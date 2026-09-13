@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -20,25 +18,12 @@ class AdminReportsScreen extends StatefulWidget {
 }
 
 class _AdminReportsScreenState extends State<AdminReportsScreen> {
-  Timer? _refreshTimer;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AdminReportsProvider>().loadReports();
-      _refreshTimer = Timer.periodic(const Duration(seconds: 20), (_) {
-        if (mounted) {
-          context.read<AdminReportsProvider>().loadReports(silent: true);
-        }
-      });
     });
-  }
-
-  @override
-  void dispose() {
-    _refreshTimer?.cancel();
-    super.dispose();
   }
 
   @override
@@ -187,8 +172,8 @@ class _ReportsContent extends StatelessWidget {
         ),
         const SizedBox(height: 32),
 
-        // Complete student roster ranked by XP.
-        const AdminSectionHeader(title: 'All Learners by XP'),
+        // Top Students
+        const AdminSectionHeader(title: 'Learner Leaderboard'),
         const SizedBox(height: 16),
         provider.topStudents.isEmpty
             ? const _InsightEmptyState(

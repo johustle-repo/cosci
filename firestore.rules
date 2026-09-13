@@ -26,7 +26,7 @@ service cloud.firestore {
           profile().data.id_verification_status in ['approved', 'legacy_approved', 'not_required'])
       );
     }
-    function validProgram(value) { return value in ['BS Information Technology', 'BS Computer Science', 'BS Mathematics', 'BS Mathematics-CIT']; }
+    function validProgram(value) { return value in ['BS Information Technology', 'BS Computer Science', 'BS Mathematics-CIT']; }
     function validYear(value) { return value in ['1st Year', '2nd Year']; }
 
     match /users/{uid} {
@@ -43,24 +43,9 @@ service cloud.firestore {
       allow read: if own(uid) || (signedIn() && resource.data.uid == request.auth.uid) || staff();
       allow update: if admin() || ((own(uid) || (signedIn() && resource.data.uid == request.auth.uid)) && request.resource.data.uid == resource.data.uid &&
         request.resource.data.email == resource.data.email && request.resource.data.role == resource.data.role &&
-        (
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'displayName', 'program', 'yearLevel', 'photoUrl', 'lastLoginAt', 'updatedAt'
-          ]) ||
-          (
-            resource.data.role == 'student' &&
-            request.resource.data.idVerificationStatus == 'approved' &&
-            validProgram(request.resource.data.program) &&
-            request.resource.data.normalizedStudentNumber is string &&
-            existsAfter(/databases/$(database)/documents/student_id_claims/$(request.resource.data.normalizedStudentNumber)) &&
-            getAfter(/databases/$(database)/documents/student_id_claims/$(request.resource.data.normalizedStudentNumber)).data.uid == request.auth.uid &&
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              'program', 'idVerificationStatus', 'idVerifiedAt',
-              'idVerifiedInstitution', 'idVerifiedName', 'studentNumber',
-              'normalizedStudentNumber', 'updatedAt'
-            ])
-          )
-        ));
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'displayName', 'program', 'yearLevel', 'photoUrl', 'lastLoginAt', 'updatedAt'
+        ]));
       allow delete: if admin();
       match /{studentData=**} {
         allow read: if own(uid) || staff();
@@ -75,16 +60,6 @@ service cloud.firestore {
           ]));
         allow delete: if own(uid) || admin();
       }
-    }
-    match /student_id_claims/{normalizedStudentNumber} {
-      allow read: if signedIn();
-      allow create: if signedIn() &&
-        request.resource.data.uid == request.auth.uid &&
-        request.resource.data.normalizedStudentNumber == normalizedStudentNumber;
-      allow update: if signedIn() && resource.data.uid == request.auth.uid &&
-        request.resource.data.uid == request.auth.uid &&
-        request.resource.data.normalizedStudentNumber == normalizedStudentNumber;
-      allow delete: if admin();
     }
     match /user_profiles/{uid} {
       allow read: if own(uid) || staff();

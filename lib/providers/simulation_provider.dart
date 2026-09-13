@@ -364,7 +364,6 @@ class SimulationProvider extends ChangeNotifier {
     final label = switch (result.status) {
       ExecutionStatus.syntaxError => 'SYNTAX ERROR',
       ExecutionStatus.runtimeError => 'RUNTIME ERROR',
-      ExecutionStatus.timedOut => 'TIME LIMIT',
       ExecutionStatus.serviceError => 'SERVICE ERROR',
       _ => 'OUTPUT',
     };
@@ -586,7 +585,6 @@ class SimulationMastery {
           (item) => ![
             'syntaxError',
             'runtimeError',
-            'timedOut',
             'serviceError',
           ].contains(item.errorCategory),
         )

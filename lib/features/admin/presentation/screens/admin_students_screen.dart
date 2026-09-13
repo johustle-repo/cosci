@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -25,7 +23,6 @@ class AdminStudentsScreen extends StatefulWidget {
 
 class _AdminStudentsScreenState extends State<AdminStudentsScreen> {
   final _searchCtrl = TextEditingController();
-  Timer? _progressRefreshTimer;
 
   @override
   void initState() {
@@ -33,16 +30,10 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AdminStudentsProvider>().loadStudents();
     });
-    _progressRefreshTimer = Timer.periodic(const Duration(seconds: 20), (_) {
-      if (mounted) {
-        context.read<AdminStudentsProvider>().loadStudents(forceRefresh: true);
-      }
-    });
   }
 
   @override
   void dispose() {
-    _progressRefreshTimer?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }

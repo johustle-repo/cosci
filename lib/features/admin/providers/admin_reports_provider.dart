@@ -30,11 +30,11 @@ class AdminReportsProvider extends ChangeNotifier {
     _service = service;
   }
 
-  Future<void> loadReports({bool silent = false}) async {
+  Future<void> loadReports() async {
     if (_service == null) return;
-    if (!silent) _isLoading = true;
+    _isLoading = true;
     _error = null;
-    if (!silent) _notifySafely();
+    _notifySafely();
     final errors = <String>[];
     Future<void> capture(Future<void> Function() load) async {
       try {

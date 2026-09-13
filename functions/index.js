@@ -130,12 +130,7 @@ exports.deleteUserAccount = onRequest(
         response.status(409).json({ message: 'You cannot delete your own administrator account.' });
         return;
       }
-      let target = await db.collection('users').doc(targetUid).get();
-      if (!target.exists) {
-        const legacyMatch = await db.collection('users')
-          .where('uid', '==', targetUid).limit(1).get();
-        if (!legacyMatch.empty) target = legacyMatch.docs[0];
-      }
+      const target = await db.collection('users').doc(targetUid).get();
       if (!target.exists) {
         response.status(404).json({ message: 'The user account no longer exists.' });
         return;
@@ -158,14 +153,8 @@ exports.deleteUserAccount = onRequest(
         if (error.code !== 'auth/user-not-found') throw error;
       }
 
-      const legacyUserDocuments = await db.collection('users')
-        .where('uid', '==', targetUid).get();
-      const accountDocuments = new Map([
-        [db.collection('users').doc(targetUid).path, db.collection('users').doc(targetUid)],
-        ...legacyUserDocuments.docs.map((document) => [document.ref.path, document.ref]),
-      ]);
       const rootDocuments = [
-        ...accountDocuments.values(),
+        db.collection('users').doc(targetUid),
         db.collection('user_profiles').doc(targetUid),
         db.collection('progress').doc(targetUid),
       ];

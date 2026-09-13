@@ -6,7 +6,6 @@ enum ExecutionStatus {
   passed,
   syntaxError,
   runtimeError,
-  timedOut,
   possibleLogicError,
   serviceError,
 }
@@ -31,7 +30,6 @@ class ExecutionResult {
     ExecutionStatus.passed => 'Compiled successfully',
     ExecutionStatus.syntaxError => 'Syntax or compilation error',
     ExecutionStatus.runtimeError => 'Runtime error',
-    ExecutionStatus.timedOut => 'Execution timed out',
     ExecutionStatus.possibleLogicError => 'Possible logic error',
     ExecutionStatus.serviceError => 'Compiler service problem',
   };
@@ -42,8 +40,6 @@ class ExecutionResult {
       'The compiler could not understand part of the code. Check punctuation, spelling, brackets, and the highlighted line.',
     ExecutionStatus.runtimeError =>
       'The program started but stopped unexpectedly. Check input handling, array positions, and operations that may be invalid while running.',
-    ExecutionStatus.timedOut =>
-      'The compiler or program exceeded the safe time limit. This can happen because of an infinite loop, code waiting for input, or a temporarily busy compiler.',
     ExecutionStatus.possibleLogicError =>
       'The program ran, but its result did not match the required behavior.',
     ExecutionStatus.serviceError =>
@@ -56,8 +52,6 @@ class ExecutionResult {
       'Fix the first reported error, then run the code again.',
     ExecutionStatus.runtimeError =>
       'Trace the values used near the reported line and retry.',
-    ExecutionStatus.timedOut =>
-      'Check loops and required input, then run again. If the code is correct, wait a moment and retry.',
     ExecutionStatus.possibleLogicError =>
       'Compare each algorithm step with the expected output.',
     ExecutionStatus.serviceError =>
@@ -178,13 +172,6 @@ class CompilerService {
       final output = '${run?['stdout'] ?? ''}'.trimRight();
       final runtimeText = '${run?['stderr'] ?? ''}'.trim();
       if (compileCode != 0 || compileText.isNotEmpty) {
-        if (_isTimeout(compileCode, compileText)) {
-          return const ExecutionResult(
-            status: ExecutionStatus.timedOut,
-            output: 'Compilation exceeded the time limit.',
-            message: 'Compilation timed out before the program could run.',
-          );
-        }
         if (_isMissingRuntime(compileText)) {
           return ExecutionResult(
             status: ExecutionStatus.serviceError,
@@ -204,13 +191,6 @@ class CompilerService {
         );
       }
       if (runCode != 0 || runtimeText.isNotEmpty) {
-        if (_isTimeout(runCode, runtimeText)) {
-          return const ExecutionResult(
-            status: ExecutionStatus.timedOut,
-            output: 'Execution exceeded the time limit.',
-            message: 'The program ran for too long and was stopped safely.',
-          );
-        }
         final location = _diagnosticLocation(runtimeText);
         return ExecutionResult(
           status: ExecutionStatus.runtimeError,
@@ -238,14 +218,6 @@ class CompilerService {
       if (_client == null) client.close();
     }
   }
-}
-
-bool _isTimeout(int exitCode, String diagnostic) {
-  final text = diagnostic.toLowerCase();
-  return exitCode == 124 ||
-      text.contains('execution timed out') ||
-      text.contains('timed out') ||
-      text.contains('timeout');
 }
 
 bool _isMissingRuntime(String diagnostic) {

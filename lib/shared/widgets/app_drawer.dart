@@ -169,11 +169,11 @@ class AppDrawer extends StatelessWidget {
                     isSelected: currentRoute == AppRoutes.account,
                     embedded: embedded,
                   ),
-                  if (normalizedRole == 'student' &&
-                      user?.normalizedIdVerificationStatus == 'approved') ...[
-                    const SizedBox(height: 8),
-                    const _StudentVerifiedTag(),
-                  ],
+                  const SizedBox(height: 8),
+                  _SidebarSupportCard(
+                    role: role,
+                    isInstructor: normalizedRole == 'instructor',
+                  ),
                 ],
               ),
             ),
@@ -389,6 +389,11 @@ class _DrawerHeader extends StatelessWidget {
                           ],
                         ),
                       ),
+                      Icon(
+                        Icons.home_rounded,
+                        size: 19,
+                        color: Colors.white.withValues(alpha: 0.72),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 18),
@@ -566,55 +571,62 @@ class _DrawerItem extends StatelessWidget {
   }
 }
 
-class _StudentVerifiedTag extends StatelessWidget {
-  const _StudentVerifiedTag();
+class _SidebarSupportCard extends StatelessWidget {
+  const _SidebarSupportCard({required this.role, required this.isInstructor});
+
+  final String role;
+  final bool isInstructor;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        color: const Color(0xFF17B890).withValues(alpha: 0.13),
-        border: Border.all(
-          color: const Color(0xFF5BE0BE).withValues(alpha: 0.32),
-        ),
+        borderRadius: BorderRadius.circular(22),
+        color: Colors.white.withValues(alpha: 0.06),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Row(
         children: [
           Container(
-            width: 36,
-            height: 36,
+            width: 46,
+            height: 46,
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: const Color(0xFF5BE0BE).withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(16),
+              gradient: const LinearGradient(
+                colors: [Color(0xFF57B5FF), Color(0xFF2DE2E6)],
+              ),
             ),
-            child: const Icon(
-              Icons.verified_rounded,
-              color: Color(0xFF72E7C8),
-              size: 22,
+            child: Icon(
+              isInstructor
+                  ? Icons.record_voice_over_rounded
+                  : Icons.school_rounded,
+              color: Color(0xFF07204B),
+              size: 24,
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
-            child: const Column(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Student verified',
-                  style: TextStyle(
+                  '$role mode is active',
+                  style: const TextStyle(
                     color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13.5,
                   ),
                 ),
-                SizedBox(height: 2),
+                const SizedBox(height: 4),
                 Text(
-                  'PSU CCS ID approved',
+                  isInstructor
+                      ? 'Review learner attempts, provide feedback, and preview every activity.'
+                      : 'Keep your workspace focused and progress visible.',
                   style: TextStyle(
-                    color: Color(0xFFB9F5E5),
-                    fontSize: 11.5,
-                    height: 1.25,
+                    color: Colors.white.withValues(alpha: 0.66),
+                    fontSize: 12,
+                    height: 1.4,
                   ),
                 ),
               ],
