@@ -17,14 +17,10 @@ service cloud.firestore {
     function instructor() { return signedIn() && role() in ['instructor', 'professor', 'teacher', 'faculty']; }
     function staff() { return admin() || instructor(); }
     function verifiedLearner() {
-      return signedIn() && (
-        (!('idVerificationStatus' in profile().data) &&
-          !('id_verification_status' in profile().data)) ||
-        ('idVerificationStatus' in profile().data &&
-          profile().data.idVerificationStatus in ['approved', 'legacy_approved', 'not_required']) ||
-        ('id_verification_status' in profile().data &&
-          profile().data.id_verification_status in ['approved', 'legacy_approved', 'not_required'])
-      );
+      // Student ID verification is temporarily bypassed on the client
+      // (see AppUser.idVerificationEnabled in the Flutter app). Restore the
+      // status check below when that flag is turned back on.
+      return signedIn();
     }
     function validProgram(value) { return value in ['BS Information Technology', 'BS Computer Science', 'BS Mathematics-CIT']; }
     function validYear(value) { return value in ['1st Year', '2nd Year']; }

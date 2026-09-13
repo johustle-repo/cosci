@@ -73,12 +73,13 @@ class CompilerService {
   static String get _resolvedDefaultEndpoint {
     if (_endpoint.trim().isNotEmpty) return _endpoint.trim();
 
-    // During local Flutter web development, use the bundled CoSci compiler
-    // automatically. Production deployments still require an explicit URL so
-    // an HTTPS page never attempts an unsafe mixed-content request.
+    // Local Flutter web development defaults to the hosted CoSci compiler so
+    // `flutter run -d chrome` works without a separately started local
+    // service. Pass --dart-define=COMPILER_API_URL=http://localhost:8787/... to
+    // exercise a locally running compiler_server instead.
     final host = Uri.base.host.toLowerCase();
     final isLocal = host.isEmpty || host == 'localhost' || host == '127.0.0.1';
-    if (isLocal) return 'http://localhost:8787/api/v2/execute';
+    if (isLocal) return 'https://cosci-compiler.onrender.com/api/v2/execute';
     return '';
   }
 
