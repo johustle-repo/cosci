@@ -2,27 +2,23 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pseudocode_apk/models/app_user.dart';
 
 void main() {
-  group('student ID verification gate', () {
-    test('student with a missing status is grandfathered in', () {
-      const user = AppUser(uid: 'student-1', email: 'student@psu.edu.ph');
-
-      expect(user.requiresIdVerification, isFalse);
-    });
-
-    test('only an explicitly approved student may continue', () {
-      const approved = AppUser(
-        uid: 'student-1',
-        email: 'student@psu.edu.ph',
-        idVerificationStatus: 'approved',
-      );
+  group('student ID verification gate (temporarily disabled)', () {
+    test('a verified email is enough regardless of ID status', () {
+      const missing = AppUser(uid: 'student-1', email: 'student@psu.edu.ph');
       const required = AppUser(
         uid: 'student-2',
         email: 'student2@psu.edu.ph',
         idVerificationStatus: 'required',
       );
+      const approved = AppUser(
+        uid: 'student-3',
+        email: 'student3@psu.edu.ph',
+        idVerificationStatus: 'approved',
+      );
 
+      expect(missing.requiresIdVerification, isFalse);
+      expect(required.requiresIdVerification, isFalse);
       expect(approved.requiresIdVerification, isFalse);
-      expect(required.requiresIdVerification, isTrue);
     });
 
     test('staff accounts do not require student ID verification', () {

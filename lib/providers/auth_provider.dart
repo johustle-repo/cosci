@@ -458,6 +458,12 @@ class AuthProvider extends ChangeNotifier {
     _notifySafely();
   }
 
+  // Deliberately does not set AuthStatus.loading: both callers run while
+  // already authenticated, and screens that invoke them are wrapped in
+  // SignedInGuard/AuthGuard, whose Consumer<AuthProvider> swaps in a
+  // LoadingView (disposing the calling screen) whenever isLoading flips true.
+  // That previously discarded in-flight navigation, e.g. after student ID
+  // verification succeeded. Callers already show their own busy indicator.
   Future<bool> _performAuthAction(Future<AppUser> Function() action) async {
     if (_authService == null) {
       _status = AuthStatus.error;
@@ -466,9 +472,7 @@ class AuthProvider extends ChangeNotifier {
       return false;
     }
 
-    _status = AuthStatus.loading;
     _errorMessage = null;
-    _notifySafely();
 
     try {
       _currentUser = await action();
