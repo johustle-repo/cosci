@@ -22,11 +22,11 @@ class AppUser {
   final String? idVerificationStatus;
 
   String get normalizedIdVerificationStatus =>
-      (idVerificationStatus ?? 'legacy_approved').trim().toLowerCase();
+      (idVerificationStatus ?? 'required').trim().toLowerCase();
   bool get requiresIdVerification =>
       isStudent &&
       normalizedIdVerificationStatus != 'approved' &&
-      normalizedIdVerificationStatus != 'legacy_approved';
+      normalizedIdVerificationStatus != 'not_required';
 
   String get normalizedRole {
     final value = role.trim().toLowerCase();

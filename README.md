@@ -63,7 +63,7 @@ flutter pub get
 ```
 
 Firebase project access is also required. Enable Firebase Authentication
-(Email/Password), Cloud Firestore, and App Check for the platforms being used.
+(Email/Password) and Cloud Firestore for the platforms being used.
 Deploying Cloud Functions requires a Firebase Blaze plan; the core application,
 Firestore, Authentication, and the local compiler can be developed without
 deploying Functions.

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pseudocode_apk/models/app_user.dart';
 import 'package:pseudocode_apk/services/firestore_service.dart';
+import 'package:pseudocode_apk/services/student_identity_service.dart';
 
 class AuthService {
   AuthService({required FirestoreService firestoreService})
@@ -321,6 +322,52 @@ class AuthService {
     );
     await user.updateDisplayName(displayName.trim());
     return (await _resolveAppUser(user))!;
+  }
+
+  Future<AppUser> completeStudentIdVerification({
+    required String institution,
+    required String studentName,
+    required String studentNumber,
+    required String normalizedProgram,
+  }) async {
+    final user = currentFirebaseUser;
+    if (user == null) {
+      throw FirebaseAuthException(code: 'requires-recent-login');
+    }
+
+    final account = await _firestoreService.fetchAppUser(user.uid);
+    final accountName = (account?.displayName ?? user.displayName ?? '').trim();
+    if (!const StudentIdentityService().namesMatch(
+      accountName: accountName,
+      idName: studentName,
+    )) {
+      throw FirebaseAuthException(
+        code: 'student-name-mismatch',
+        message:
+            'The name on the student ID does not match the learner account name ($accountName).',
+      );
+    }
+
+    try {
+      await _firestoreService.completeStudentIdVerification(
+        uid: user.uid,
+        institution: institution,
+        studentName: studentName,
+        studentNumber: studentNumber,
+        normalizedProgram: normalizedProgram,
+      );
+    } on FirebaseException catch (error) {
+      throw FirebaseAuthException(code: error.code, message: error.message);
+    }
+
+    final refreshed = await _resolveAppUser(user);
+    if (refreshed == null || refreshed.requiresIdVerification) {
+      throw FirebaseAuthException(
+        code: 'id-verification-save-failed',
+        message: 'The verified student ID could not be saved. Please retry.',
+      );
+    }
+    return refreshed;
   }
 
   AppUser _fallbackAppUser(User firebaseUser) {

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:pseudocode_apk/models/gamification_profile.dart';
 
 /// Combined view of a student used in the admin panel.
 /// Merges data from `users`, `user_profiles`, and `progress` collections.
@@ -105,13 +106,38 @@ class AdminStudentProfile {
   }) {
     final p = profileMap ?? {};
     final pr = progressMap ?? {};
+    final profileXp = _readInt(p['totalXp'] ?? p['points']);
+    final progressXp = _readInt(pr['totalXp'] ?? pr['points']);
+    final totalXp = profileXp > progressXp ? profileXp : progressXp;
+    final storedLevel = _readInt(
+      p['currentLevel'] ?? pr['currentLevel'],
+      fallback: 1,
+    );
+    final derivedLevel = GamificationProfile.resolveLevel(totalXp);
+    final profileStreak = _readInt(p['streakDays']);
+    final progressStreak = _readInt(pr['streakDays']);
+    final streakDays = profileStreak > progressStreak
+        ? profileStreak
+        : progressStreak;
+    final profileActivity = _toDateTime(p['lastActivityAt']);
+    final progressActivity = _toDateTime(pr['lastActivityAt']);
+    final email = _firstText([userMap['email'], p['email']]);
+    final displayName = _firstText([
+      userMap['displayName'],
+      userMap['fullName'],
+      userMap['full_name'],
+      userMap['name'],
+      userMap['idVerifiedName'],
+      p['displayName'],
+      p['fullName'],
+      p['full_name'],
+      p['name'],
+      p['idVerifiedName'],
+    ]);
     return AdminStudentProfile(
       uid: uid,
-      email: userMap['email'] as String? ?? '',
-      displayName:
-          userMap['displayName'] as String? ??
-          p['displayName'] as String? ??
-          'Student',
+      email: email,
+      displayName: displayName.isNotEmpty ? displayName : _nameFromEmail(email),
       role: userMap['role'] as String? ?? 'student',
       isActive: (userMap['accountStatus'] as String?) == null
           ? userMap['isActive'] as bool? ?? true
@@ -119,18 +145,54 @@ class AdminStudentProfile {
       course: p['course'] as String? ?? 'BSIT',
       yearLevel: p['yearLevel'] as String?,
       photoUrl: p['photoUrl'] as String?,
-      totalXp: (p['totalXp'] as num?)?.toInt() ?? 0,
-      currentLevel: (p['currentLevel'] as num?)?.toInt() ?? 1,
-      streakDays: (p['streakDays'] as num?)?.toInt() ?? 0,
-      badgesEarned: (p['badgesEarned'] as num?)?.toInt() ?? 0,
-      completedLessons: (pr['completedLessons'] as num?)?.toInt() ?? 0,
-      completedQuizzes: (pr['completedQuizzes'] as num?)?.toInt() ?? 0,
-      completedPuzzles: (pr['completedPuzzles'] as num?)?.toInt() ?? 0,
-      completedChallenges: (pr['completedChallenges'] as num?)?.toInt() ?? 0,
+      totalXp: totalXp,
+      currentLevel: storedLevel > derivedLevel ? storedLevel : derivedLevel,
+      streakDays: streakDays,
+      badgesEarned: _readInt(p['badgesEarned']),
+      completedLessons: _readInt(pr['completedLessons']),
+      completedQuizzes: _readInt(pr['completedQuizzes']),
+      completedPuzzles: _readInt(pr['completedPuzzles']),
+      completedChallenges: _readInt(pr['completedChallenges']),
       lastLoginAt: _toDateTime(userMap['lastLoginAt']),
       createdAt: _toDateTime(userMap['createdAt']),
-      lastActivityAt: _toDateTime(p['lastActivityAt']),
+      lastActivityAt: _latestDate(profileActivity, progressActivity),
     );
+  }
+
+  static int _readInt(dynamic value, {int fallback = 0}) {
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? fallback;
+    return fallback;
+  }
+
+  static String _firstText(Iterable<dynamic> values) {
+    for (final value in values) {
+      final text = value?.toString().trim() ?? '';
+      if (text.isNotEmpty && text.toLowerCase() != 'student') return text;
+    }
+    return '';
+  }
+
+  static String _nameFromEmail(String email) {
+    final localPart = email.split('@').first.trim();
+    if (localPart.isEmpty) return 'Unnamed account';
+    final words = localPart
+        .replaceAll(RegExp(r'\d+$'), '')
+        .split(RegExp(r'[._\-]+'))
+        .where((word) => word.isNotEmpty)
+        .map(
+          (word) => word.length == 1
+              ? word.toUpperCase()
+              : '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}',
+        )
+        .toList();
+    return words.isEmpty ? 'Unnamed account' : words.join(' ');
+  }
+
+  static DateTime? _latestDate(DateTime? first, DateTime? second) {
+    if (first == null) return second;
+    if (second == null) return first;
+    return first.isAfter(second) ? first : second;
   }
 
   static DateTime? _toDateTime(dynamic value) {

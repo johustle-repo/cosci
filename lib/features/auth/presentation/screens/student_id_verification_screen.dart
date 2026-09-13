@@ -3,9 +3,14 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:pseudocode_apk/app/routes/app_routes.dart';
+
+import 'package:pseudocode_apk/features/auth/presentation/utils/role_redirect.dart';
 import 'package:pseudocode_apk/providers/auth_provider.dart';
+import 'package:pseudocode_apk/services/college_eligibility_service.dart';
+import 'package:pseudocode_apk/services/student_id_models.dart';
 import 'package:pseudocode_apk/services/student_id_verification_service.dart';
+
+enum _Stage { capture, review, accepted, rejected, reviewRequired }
 
 class StudentIdVerificationScreen extends StatefulWidget {
   const StudentIdVerificationScreen({super.key});
@@ -17,17 +22,35 @@ class StudentIdVerificationScreen extends StatefulWidget {
 
 class _StudentIdVerificationScreenState
     extends State<StudentIdVerificationScreen> {
-  final _studentNumber = TextEditingController();
-  final _picker = ImagePicker();
+  final ImagePicker _picker = ImagePicker();
+
+  final TextEditingController _institution = TextEditingController();
+
+  final TextEditingController _name = TextEditingController();
+
+  final TextEditingController _number = TextEditingController();
+
+  final TextEditingController _program = TextEditingController();
+
   Uint8List? _image;
+
   String _mimeType = 'image/jpeg';
+
   String? _message;
-  String? _resultStatus;
+
+  String? _normalizedProgram;
+
   bool _busy = false;
+
+  _Stage _stage = _Stage.capture;
 
   @override
   void dispose() {
-    _studentNumber.dispose();
+    _institution.dispose();
+    _name.dispose();
+    _number.dispose();
+    _program.dispose();
+
     super.dispose();
   }
 
@@ -35,290 +58,567 @@ class _StudentIdVerificationScreenState
     try {
       final file = await _picker.pickImage(
         source: source,
-        imageQuality: 88,
-        maxWidth: 1800,
+        imageQuality: 95,
+        maxWidth: 2000,
       );
-      if (file == null) return;
-      final bytes = await file.readAsBytes();
-      if (!mounted) return;
-      if (bytes.length > 5 * 1024 * 1024) {
-        setState(() => _message = 'Use an image smaller than 5 MB.');
+
+      if (file == null) {
         return;
       }
+
+      final bytes = await file.readAsBytes();
+
+      if (!mounted) {
+        return;
+      }
+
+      if (bytes.length > 10 * 1024 * 1024) {
+        setState(() {
+          _message = 'Please select an image smaller than 10 MB.';
+        });
+
+        return;
+      }
+
+      final name = file.name.toLowerCase();
+
       setState(() {
         _image = bytes;
+
         _mimeType =
             file.mimeType ??
-            (file.name.toLowerCase().endsWith('.png')
-                ? 'image/png'
-                : 'image/jpeg');
+            (name.endsWith('.png') ? 'image/png' : 'image/jpeg');
+
         _message = null;
-        _resultStatus = null;
+
+        _normalizedProgram = null;
+
+        _stage = _Stage.capture;
       });
-    } catch (_) {
-      if (!mounted) return;
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
       setState(() {
-        _message = source == ImageSource.camera
-            ? 'Camera access was denied or unavailable. Allow camera access in your device settings, or upload from your gallery.'
-            : 'Photo access was denied or unavailable. Allow photo access in your device settings and try again.';
-        _resultStatus = null;
+        _message =
+            'Camera or photo access is unavailable. Please allow permission and try again.';
       });
     }
   }
 
-  Future<void> _submit() async {
-    final number = _studentNumber.text.trim().toUpperCase();
-    if (number.isNotEmpty &&
-        !RegExp(r'^\d{2}\s*-?\s*[A-Z]{2}\s*-?\s*\d{4}$').hasMatch(number)) {
-      setState(
-        () => _message =
-            'Check the student number, or leave it blank so CoSci can read it from the ID.',
-      );
-      return;
-    }
+  Future<void> _scan() async {
     if (_image == null) {
-      setState(
-        () => _message =
-            'Take or upload a clear photo of the front of your PSU ID.',
-      );
+      setState(() {
+        _message =
+            'Take or upload a clear photo of the front of your PSU student ID.';
+      });
+
       return;
     }
+
     setState(() {
       _busy = true;
       _message = null;
     });
+
     try {
-      final result = await const StudentIdVerificationService().verify(
+      final result = await const StudentIdVerificationService().scan(
         imageBytes: _image!,
         mimeType: _mimeType,
-        studentNumber: number,
       );
-      if (!mounted) return;
+
+      if (!mounted) {
+        return;
+      }
+
+      _institution.text = result.fields.institution;
+
+      _name.text = result.fields.studentName;
+
+      _number.text = result.fields.studentNumber;
+
+      _program.text = result.normalizedProgram ?? result.fields.program;
+
       setState(() {
-        _resultStatus = result.status;
         _message = result.message;
+
+        _normalizedProgram = result.normalizedProgram;
+
+        _stage = _Stage.review;
       });
-      if (result.approved) {
-        await context.read<AuthProvider>().refreshSession();
-        if (!mounted) return;
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          AppRoutes.dashboard,
-          (_) => false,
-        );
-      }
+
+      debugPrint('=========== RAW OCR ===========');
+
+      debugPrint(result.rawText);
+
+      debugPrint('===============================');
     } catch (error) {
-      if (mounted) {
-        setState(
-          () => _message = error.toString().replaceFirst('Bad state: ', ''),
-        );
+      if (!mounted) {
+        return;
       }
+
+      setState(() {
+        _message = _cleanError(error);
+      });
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
     }
+  }
+
+  StudentIdExtractedFields get _fields => StudentIdExtractedFields(
+    institution: _institution.text,
+    studentName: _name.text,
+    studentNumber: _number.text,
+    program: _program.text,
+  );
+
+  Future<void> _confirm() async {
+    if (_institution.text.trim().isEmpty ||
+        _name.text.trim().isEmpty ||
+        _number.text.trim().isEmpty ||
+        _program.text.trim().isEmpty) {
+      setState(() {
+        _stage = _Stage.reviewRequired;
+
+        _message =
+            'Complete the institution, student name, student number, and program before verification.';
+      });
+
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+
+    try {
+      // IMPORTANT:
+      //
+      // confirm() receives ONLY fields.
+      //
+      // Do NOT send imageBytes or mimeType here.
+      final result = await const StudentIdVerificationService().confirm(
+        fields: _fields,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _message = result.message;
+
+        _normalizedProgram = result.normalizedProgram;
+
+        _stage = switch (result.status) {
+          EligibilityStatus.accepted => _Stage.accepted,
+
+          EligibilityStatus.rejected => _Stage.rejected,
+
+          EligibilityStatus.reviewRequired => _Stage.reviewRequired,
+        };
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _message = _cleanError(error);
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  void _reset() {
+    setState(() {
+      _stage = _Stage.capture;
+
+      _image = null;
+
+      _message = null;
+
+      _normalizedProgram = null;
+
+      _institution.clear();
+      _name.clear();
+      _number.clear();
+      _program.clear();
+    });
+  }
+
+  Future<void> _continue() async {
+    final program = _normalizedProgram?.trim() ?? '';
+    if (program.isEmpty) {
+      setState(() {
+        _message =
+            'The verified program is missing. Review the ID information and try again.';
+      });
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+
+    final auth = context.read<AuthProvider>();
+    final saved = await auth.completeStudentIdVerification(
+      institution: _institution.text,
+      studentName: _name.text,
+      studentNumber: _number.text,
+      normalizedProgram: program,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    if (!saved) {
+      setState(() {
+        _busy = false;
+        _message =
+            auth.errorMessage ??
+            'The verified student ID could not be saved. Please try again.';
+      });
+      return;
+    }
+
+    final destination = RoleRedirect.homeRoute(auth.currentUser);
+    Navigator.pushNamedAndRemoveUntil(context, destination, (_) => false);
+  }
+
+  String _cleanError(Object error) {
+    return error
+        .toString()
+        .replaceFirst('Bad state: ', '')
+        .replaceFirst('StateError: ', '')
+        .replaceFirst('Exception: ', '');
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<AuthProvider>().currentUser;
-    final wide = MediaQuery.sizeOf(context).width >= 920;
-    final form = _VerificationCard(
-      name: user?.displayName ?? 'Learner',
-      program: user?.program ?? 'Program not set',
-      studentNumber: _studentNumber,
-      image: _image,
-      busy: _busy,
-      message: _message,
-      rejected: _resultStatus == 'rejected',
-      onCamera: () => _pick(ImageSource.camera),
-      onGallery: () => _pick(ImageSource.gallery),
-      onSubmit: _submit,
-      onSignOut: () => context.read<AuthProvider>().signOut(),
-    );
+    final wide = MediaQuery.sizeOf(context).width >= 900;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF3F7FD),
-      body: Stack(
-        children: [
-          const Positioned(
-            top: -130,
-            right: -90,
-            child: _Orb(size: 330, color: Color(0xFFDDE8FB)),
-          ),
-          const Positioned(
-            bottom: -150,
-            left: -100,
-            child: _Orb(size: 310, color: Color(0xFFDDF5F4)),
-          ),
-          SafeArea(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.symmetric(
-                horizontal: wide ? 40 : 16,
-                vertical: wide ? 32 : 16,
-              ),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1180),
-                  child: wide
-                      ? IntrinsicHeight(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Expanded(
-                                flex: 4,
-                                child: _OverviewPanel(
-                                  name: user?.displayName ?? 'Learner',
-                                ),
-                              ),
-                              const SizedBox(width: 24),
-                              Expanded(flex: 6, child: form),
-                            ],
-                          ),
-                        )
-                      : form,
-                ),
-              ),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(wide ? 32 : 16),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1050),
+              child: wide
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Expanded(child: _Intro()),
+                        const SizedBox(width: 24),
+                        Expanded(child: _card()),
+                      ],
+                    )
+                  : _card(),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _card() {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: const BorderSide(color: Color(0xFFD4E1F3)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 220),
+          child: _content(),
+        ),
+      ),
+    );
+  }
+
+  Widget _content() {
+    if (_stage == _Stage.accepted) {
+      return _Outcome(
+        key: const ValueKey('accepted'),
+        icon: Icons.verified_rounded,
+        color: const Color(0xFF079669),
+        title: 'Student ID Verified',
+        message: _message ?? CollegeEligibilityService.acceptedMessage,
+        details: {
+          'Name': _name.text,
+          'Student Number': _number.text,
+          'Program': _normalizedProgram ?? _program.text,
+          'College': CollegeEligibilityService.collegeName,
+        },
+        primaryLabel: 'Continue',
+        onPrimary: _continue,
+        busy: _busy,
+      );
+    }
+
+    if (_stage == _Stage.rejected) {
+      return _Outcome(
+        key: const ValueKey('rejected'),
+        icon: Icons.block_rounded,
+        color: const Color(0xFFD14343),
+        title: 'Student Not Eligible',
+        message: _message ?? CollegeEligibilityService.rejectedMessage,
+        details: {
+          'Detected Program': _normalizedProgram ?? _program.text,
+          'Eligible Programs':
+              'BS Information Technology\n'
+              'BS Computer Science\n'
+              'BS Mathematics',
+        },
+        primaryLabel: 'Scan Another ID',
+        onPrimary: _reset,
+      );
+    }
+
+    if (_stage == _Stage.reviewRequired) {
+      return _Outcome(
+        key: const ValueKey('reviewRequired'),
+        icon: Icons.manage_search_rounded,
+        color: const Color(0xFFD97706),
+        title: 'Program Could Not Be Verified',
+        message: _message ?? CollegeEligibilityService.reviewMessage,
+        details: const {},
+        primaryLabel: 'Review Information',
+        onPrimary: () {
+          setState(() {
+            _stage = _Stage.review;
+          });
+        },
+        secondaryLabel: 'Scan Again',
+        onSecondary: _reset,
+      );
+    }
+
+    if (_stage == _Stage.review) {
+      return Column(
+        key: const ValueKey('review'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _Heading(
+            icon: Icons.fact_check_outlined,
+            title: 'Review extracted information',
+            subtitle: 'Correct any OCR mistakes before verification.',
+          ),
+          const SizedBox(height: 20),
+          _field(_institution, 'Institution', Icons.account_balance_outlined),
+          _field(_name, 'Student Name', Icons.person_outline),
+          _field(_number, 'Student Number', Icons.tag),
+          _field(_program, 'Program', Icons.school_outlined),
+          if (_message != null) _notice(_message!),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: _busy ? null : _confirm,
+            icon: _busy
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.verified_user_outlined),
+            label: const Text('Verify corrected information'),
+          ),
+          TextButton(
+            onPressed: _busy ? null : _reset,
+            child: const Text('Scan Again'),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      key: const ValueKey('capture'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _Heading(
+          icon: Icons.badge_outlined,
+          title: 'Verify your PSU student ID',
+          subtitle:
+              'Take or upload the front of your ID. You can review every extracted field before verification.',
+        ),
+        const SizedBox(height: 20),
+        Container(
+          height: 210,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF7FAFE),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFD4E1F3)),
+          ),
+          child: _image == null
+              ? const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.add_photo_alternate_outlined,
+                        size: 42,
+                        color: Color(0xFF17499E),
+                      ),
+                      SizedBox(height: 10),
+                      Text('No ID image selected'),
+                    ],
+                  ),
+                )
+              : ClipRRect(
+                  borderRadius: BorderRadius.circular(17),
+                  child: Image.memory(_image!, fit: BoxFit.contain),
+                ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            OutlinedButton.icon(
+              onPressed: _busy ? null : () => _pick(ImageSource.camera),
+              icon: const Icon(Icons.camera_alt_outlined),
+              label: const Text('Take a photo'),
+            ),
+            OutlinedButton.icon(
+              onPressed: _busy ? null : () => _pick(ImageSource.gallery),
+              icon: const Icon(Icons.photo_library_outlined),
+              label: const Text('Upload from gallery'),
+            ),
+          ],
+        ),
+        if (_message != null) _notice(_message!),
+        const SizedBox(height: 14),
+        FilledButton.icon(
+          onPressed: _busy ? null : _scan,
+          icon: _busy
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.document_scanner_outlined),
+          label: Text(_busy ? 'Reading ID...' : 'Read student ID'),
+        ),
+        TextButton(
+          onPressed: _busy
+              ? null
+              : () => context.read<AuthProvider>().signOut(),
+          child: const Text('Sign out'),
+        ),
+      ],
+    );
+  }
+
+  Widget _field(TextEditingController controller, String label, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: controller,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+      ),
+    );
+  }
+
+  Widget _notice(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF6E8),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(text),
+      ),
+    );
+  }
+}
+
+class _Intro extends StatelessWidget {
+  const _Intro();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0B2551), Color(0xFF17499E)],
+        ),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.shield_outlined, color: Colors.white, size: 42),
+          SizedBox(height: 22),
+          Text(
+            'CCS learner verification',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          SizedBox(height: 12),
+          Text(
+            'A simple three-step check protects the CoSci learning workspace.',
+            style: TextStyle(color: Color(0xFFDCE8FF), height: 1.5),
+          ),
+          SizedBox(height: 28),
+          _Step('1', 'Capture or upload your PSU ID'),
+          _Step('2', 'Review the extracted details'),
+          _Step('3', 'Confirm your eligible CCS program'),
         ],
       ),
     );
   }
 }
 
-class _VerificationCard extends StatelessWidget {
-  const _VerificationCard({
-    required this.name,
-    required this.program,
-    required this.studentNumber,
-    required this.image,
-    required this.busy,
-    required this.message,
-    required this.rejected,
-    required this.onCamera,
-    required this.onGallery,
-    required this.onSubmit,
-    required this.onSignOut,
-  });
+class _Step extends StatelessWidget {
+  const _Step(this.number, this.text);
 
-  final String name;
-  final String program;
-  final TextEditingController studentNumber;
-  final Uint8List? image;
-  final bool busy;
-  final String? message;
-  final bool rejected;
-  final VoidCallback onCamera;
-  final VoidCallback onGallery;
-  final VoidCallback onSubmit;
-  final VoidCallback onSignOut;
+  final String number;
+  final String text;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 420 ? 18 : 24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: const Color(0xFFD6E2F2)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x140B2854),
-            blurRadius: 28,
-            offset: Offset(0, 12),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
         children: [
-          const _Heading(),
-          const SizedBox(height: 20),
-          const _ProgressSteps(),
-          const SizedBox(height: 20),
-          _LearnerSummary(name: name, program: program),
-          const SizedBox(height: 18),
-          const Text(
-            '1. Student number (optional)',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 9),
-          TextField(
-            controller: studentNumber,
-            enabled: !busy,
-            textCapitalization: TextCapitalization.characters,
-            decoration: InputDecoration(
-              hintText: 'We can read this from your ID',
-              prefixIcon: const Icon(Icons.numbers_rounded),
-              filled: true,
-              fillColor: const Color(0xFFF8FAFD),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(color: Color(0xFFD6E2F2)),
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: const Color(0xFF2DD4BF),
+            child: Text(
+              number,
+              style: const TextStyle(
+                color: Color(0xFF0B2551),
+                fontWeight: FontWeight.bold,
               ),
             ),
           ),
-          const SizedBox(height: 18),
-          const Text(
-            '2. Add a clear photo of your ID',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 5),
-          const Text(
-            'Use the front of your ID. Keep PSU, your course, and student number visible.',
-            style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
-          ),
-          const SizedBox(height: 10),
-          _ImageArea(image: image, busy: busy, onTap: onGallery),
-          const SizedBox(height: 12),
-          _PickerButtons(busy: busy, onCamera: onCamera, onGallery: onGallery),
-          if (message != null) ...[
-            const SizedBox(height: 14),
-            _Feedback(message: message!, rejected: rejected),
-          ],
-          const SizedBox(height: 18),
-          SizedBox(
-            height: 50,
-            child: FilledButton.icon(
-              onPressed: busy ? null : onSubmit,
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF1746A2),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              icon: busy
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.verified_user_outlined),
-              label: Text(busy ? 'Reading your ID…' : 'Verify my ID'),
-            ),
-          ),
-          const SizedBox(height: 11),
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.shield_outlined, size: 16, color: Color(0xFF64748B)),
-              SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  'Your image is used only for this eligibility check.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
-                ),
-              ),
-            ],
-          ),
-          TextButton(
-            onPressed: busy ? null : onSignOut,
-            child: const Text('Sign out and use another account'),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(text, style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -327,434 +627,123 @@ class _VerificationCard extends StatelessWidget {
 }
 
 class _Heading extends StatelessWidget {
-  const _Heading();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 52,
-          height: 52,
-          decoration: BoxDecoration(
-            color: const Color(0xFFE9F1FF),
-            borderRadius: BorderRadius.circular(15),
-          ),
-          child: const Icon(
-            Icons.verified_user_outlined,
-            color: Color(0xFF1746A2),
-            size: 27,
-          ),
-        ),
-        const SizedBox(width: 14),
-        const Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Student ID verification',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
-              ),
-              SizedBox(height: 3),
-              Text(
-                'Secure eligibility check • usually under a minute',
-                style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _LearnerSummary extends StatelessWidget {
-  const _LearnerSummary({required this.name, required this.program});
-  final String name;
-  final String program;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF0F6FF),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: const Color(0xFFD9E7FB)),
-      ),
-      child: Row(
-        children: [
-          const CircleAvatar(
-            radius: 20,
-            backgroundColor: Color(0xFFDCE9FF),
-            child: Icon(Icons.person_outline, color: Color(0xFF1746A2)),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                Text(
-                  program,
-                  style: const TextStyle(
-                    color: Color(0xFF64748B),
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Icon(Icons.check_circle, color: Color(0xFF0B9B78)),
-        ],
-      ),
-    );
-  }
-}
-
-class _ImageArea extends StatelessWidget {
-  const _ImageArea({
-    required this.image,
-    required this.busy,
-    required this.onTap,
+  const _Heading({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
   });
-  final Uint8List? image;
-  final bool busy;
-  final VoidCallback onTap;
 
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: busy ? null : onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        height: image == null ? 150 : 230,
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFD),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: image == null
-                ? const Color(0xFFBFD1EA)
-                : const Color(0xFF31A98B),
-            width: image == null ? 1 : 2,
-          ),
-        ),
-        child: image == null
-            ? const Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.add_photo_alternate_outlined,
-                    size: 38,
-                    color: Color(0xFF1746A2),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Tap to select your PSU ID',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'JPG or PNG • maximum 5 MB',
-                    style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
-                  ),
-                ],
-              )
-            : Stack(
-                fit: StackFit.expand,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: Image.memory(image!, fit: BoxFit.contain),
-                  ),
-                  Positioned(
-                    top: 10,
-                    right: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF087B61),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.check, color: Colors.white, size: 16),
-                          SizedBox(width: 4),
-                          Text(
-                            'Photo ready',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-      ),
-    );
-  }
-}
-
-class _PickerButtons extends StatelessWidget {
-  const _PickerButtons({
-    required this.busy,
-    required this.onCamera,
-    required this.onGallery,
-  });
-  final bool busy;
-  final VoidCallback onCamera;
-  final VoidCallback onGallery;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final camera = OutlinedButton.icon(
-          onPressed: busy ? null : onCamera,
-          icon: const Icon(Icons.camera_alt_outlined),
-          label: const Text('Take a photo'),
-        );
-        final gallery = OutlinedButton.icon(
-          onPressed: busy ? null : onGallery,
-          icon: const Icon(Icons.photo_library_outlined),
-          label: const Text('Upload from gallery'),
-        );
-        if (constraints.maxWidth < 470) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [camera, const SizedBox(height: 8), gallery],
-          );
-        }
-        return Row(
-          children: [
-            Expanded(child: camera),
-            const SizedBox(width: 10),
-            Expanded(child: gallery),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _Feedback extends StatelessWidget {
-  const _Feedback({required this.message, required this.rejected});
-  final String message;
-  final bool rejected;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = rejected ? const Color(0xFFBE123C) : const Color(0xFF805000);
-    return Container(
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: rejected ? const Color(0xFFFFE8EC) : const Color(0xFFFFF6E8),
-        borderRadius: BorderRadius.circular(13),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            rejected ? Icons.error_outline : Icons.info_outline,
-            size: 20,
-            color: color,
-          ),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Text(message, style: TextStyle(color: color)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _OverviewPanel extends StatelessWidget {
-  const _OverviewPanel({required this.name});
-  final String name;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(36),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF0B2854), Color(0xFF1746A2), Color(0xFF129F9A)],
-        ),
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x260B2854),
-            blurRadius: 34,
-            offset: Offset(0, 16),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 68,
-            height: 68,
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Image.asset('assets/images/cosci.png'),
-          ),
-          const SizedBox(height: 30),
-          const Text(
-            'One final step,\nthen you can start learning.',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 30,
-              height: 1.2,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'Welcome, $name. Verify your PSU student ID to keep CoSci exclusive to eligible College of Computing Sciences learners.',
-            style: const TextStyle(
-              color: Color(0xFFD7E5FF),
-              fontSize: 15,
-              height: 1.55,
-            ),
-          ),
-          const Spacer(),
-          const SizedBox(height: 32),
-          const _OverviewItem(
-            icon: Icons.badge_outlined,
-            text: 'Confirm your student number',
-          ),
-          const _OverviewItem(
-            icon: Icons.school_outlined,
-            text: 'Check your eligible program',
-          ),
-          const _OverviewItem(
-            icon: Icons.lock_outline_rounded,
-            text: 'Discard the ID after review',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _OverviewItem extends StatelessWidget {
-  const _OverviewItem({required this.icon, required this.text});
   final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 14),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: .12),
-              borderRadius: BorderRadius.circular(11),
-            ),
-            child: Icon(icon, size: 20, color: const Color(0xFF91F2E9)),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ProgressSteps extends StatelessWidget {
-  const _ProgressSteps();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Row(
-      children: [
-        _Step(label: 'Account', number: '1', complete: true),
-        Expanded(child: Divider(color: Color(0xFF74A3EF), thickness: 2)),
-        _Step(label: 'Email', number: '2', complete: true),
-        Expanded(child: Divider(color: Color(0xFF74A3EF), thickness: 2)),
-        _Step(label: 'Student ID', number: '3', complete: false),
-      ],
-    );
-  }
-}
-
-class _Step extends StatelessWidget {
-  const _Step({
-    required this.label,
-    required this.number,
-    required this.complete,
-  });
-  final String label;
-  final String number;
-  final bool complete;
+  final String title;
+  final String subtitle;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        CircleAvatar(
-          radius: 15,
-          backgroundColor: complete
-              ? const Color(0xFF0B9B78)
-              : const Color(0xFF1746A2),
-          child: complete
-              ? const Icon(Icons.check, size: 17, color: Colors.white)
-              : Text(
-                  number,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-        ),
-        const SizedBox(height: 5),
+        Icon(icon, color: const Color(0xFF17499E), size: 38),
+        const SizedBox(height: 10),
         Text(
-          label,
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+          title,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          subtitle,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Color(0xFF60728E), height: 1.4),
         ),
       ],
     );
   }
 }
 
-class _Orb extends StatelessWidget {
-  const _Orb({required this.size, required this.color});
-  final double size;
+class _Outcome extends StatelessWidget {
+  const _Outcome({
+    super.key,
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.message,
+    required this.details,
+    required this.primaryLabel,
+    required this.onPrimary,
+    this.secondaryLabel,
+    this.onSecondary,
+    this.busy = false,
+  });
+
+  final IconData icon;
   final Color color;
+  final String title;
+  final String message;
+  final Map<String, String> details;
+  final String primaryLabel;
+  final VoidCallback onPrimary;
+  final String? secondaryLabel;
+  final VoidCallback? onSecondary;
+  final bool busy;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    decoration: BoxDecoration(shape: BoxShape.circle, color: color),
-  );
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Icon(icon, size: 48, color: color),
+        const SizedBox(height: 12),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          message,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Color(0xFF60728E), height: 1.4),
+        ),
+        if (details.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          ...details.entries.map(
+            (entry) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    entry.key,
+                    style: const TextStyle(
+                      color: Color(0xFF60728E),
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    entry.value,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 12),
+        FilledButton(
+          onPressed: busy ? null : onPrimary,
+          child: busy
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Text(primaryLabel),
+        ),
+        if (secondaryLabel != null)
+          TextButton(onPressed: onSecondary, child: Text(secondaryLabel!)),
+      ],
+    );
+  }
 }

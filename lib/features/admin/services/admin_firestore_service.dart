@@ -104,20 +104,21 @@ class AdminFirestoreService {
 
     final profilesByIdentity = <String, AdminStudentProfile>{};
     for (final doc in usersSnap.docs) {
-      final uid = doc.id;
       final userMap = doc.data();
+      final storedUid = (userMap['uid'] ?? '').toString().trim();
+      final uid = storedUid.isNotEmpty ? storedUid : doc.id;
       final profile = AdminStudentProfile.fromMaps(
         uid: uid,
         userMap: userMap,
-        profileMap: profileMaps[uid],
-        progressMap: progressMaps[uid],
+        profileMap: profileMaps[uid] ?? profileMaps[doc.id],
+        progressMap: progressMaps[uid] ?? progressMaps[doc.id],
       );
       final canonicalIdentity = (userMap['uid'] ?? userMap['email'] ?? uid)
           .toString()
           .trim()
           .toLowerCase();
       final existing = profilesByIdentity[canonicalIdentity];
-      final isUidDocument = userMap['uid'] == uid;
+      final isUidDocument = doc.id == uid;
       if (existing == null || isUidDocument) {
         profilesByIdentity[canonicalIdentity] = profile;
       }
@@ -133,13 +134,30 @@ class AdminFirestoreService {
   }
 
   Future<AdminStudentProfile?> fetchStudentById(String uid) async {
-    final userSnap = await _db.collection('users').doc(uid).get();
-    if (!userSnap.exists) return null;
-    final profileSnap = await _db.collection('user_profiles').doc(uid).get();
-    final progressSnap = await _db.collection('progress').doc(uid).get();
+    var userSnap = await _db.collection('users').doc(uid).get();
+    if (!userSnap.exists) {
+      final legacy = await _db
+          .collection('users')
+          .where('uid', isEqualTo: uid)
+          .limit(1)
+          .get();
+      if (legacy.docs.isEmpty) return null;
+      userSnap = legacy.docs.first;
+    }
+    final userMap = userSnap.data() ?? <String, dynamic>{};
+    final storedUid = (userMap['uid'] ?? '').toString().trim();
+    final progressUid = storedUid.isNotEmpty ? storedUid : uid;
+    final profileSnap = await _db
+        .collection('user_profiles')
+        .doc(progressUid)
+        .get();
+    final progressSnap = await _db
+        .collection('progress')
+        .doc(progressUid)
+        .get();
     return AdminStudentProfile.fromMaps(
-      uid: uid,
-      userMap: userSnap.data() ?? {},
+      uid: progressUid,
+      userMap: userMap,
       profileMap: profileSnap.data(),
       progressMap: progressSnap.data(),
     );
@@ -264,7 +282,11 @@ class AdminFirestoreService {
         .limit(200)
         .get();
     for (final user in users.docs) {
-      final progress = await user.reference.collection('lesson_progress').get();
+      final storedUid = (user.data()['uid'] ?? '').toString().trim();
+      final progressOwner = storedUid.isEmpty
+          ? user.reference
+          : _db.collection('users').doc(storedUid);
+      final progress = await progressOwner.collection('lesson_progress').get();
       for (final item in progress.docs) {
         if (item.data()['completed'] == true) {
           counts[item.id] = (counts[item.id] ?? 0) + 1;
@@ -967,9 +989,11 @@ class AdminFirestoreService {
     final topicScores = <String, List<int>>{};
 
     for (final userDoc in usersSnap.docs) {
+      final storedUid = (userDoc.data()['uid'] ?? '').toString().trim();
+      final progressUid = storedUid.isNotEmpty ? storedUid : userDoc.id;
       final quizProgressSnap = await _db
           .collection('users')
-          .doc(userDoc.id)
+          .doc(progressUid)
           .collection('quiz_progress')
           .get();
       for (final qDoc in quizProgressSnap.docs) {
@@ -990,26 +1014,29 @@ class AdminFirestoreService {
   }
 
   Future<Map<String, dynamic>> fetchSimulationAnalytics() async {
-    final users = await _db
-        .collection('users')
-        .where('role', isEqualTo: 'student')
-        .limit(200)
-        .get();
+    final snapshots = await Future.wait([
+      _db.collectionGroup('simulation_attempts').limit(1000).get(),
+      _db.collection('user_profiles').get(),
+    ]);
+    final attemptSnapshot = snapshots[0];
+    final profileByUid = <String, Map<String, dynamic>>{
+      for (final profile in snapshots[1].docs) profile.id: profile.data(),
+    };
     final attempts = <Map<String, dynamic>>[];
-    for (final user in users.docs) {
-      final profile = user.data();
-      final snapshot = await user.reference
-          .collection('simulation_attempts')
-          .get();
-      attempts.addAll(
-        snapshot.docs.map(
-          (doc) => {
-            ...doc.data(),
-            'program': profile['program'] ?? 'Unknown',
-            'yearLevel': profile['yearLevel'] ?? 'Unknown',
-          },
-        ),
-      );
+    for (final document in attemptSnapshot.docs) {
+      final ownerUid = document.reference.parent.parent?.id ?? '';
+      final profile = profileByUid[ownerUid] ?? const <String, dynamic>{};
+      attempts.add({
+        ...document.data(),
+        'userId': ownerUid,
+        'program':
+            document.data()['program'] ??
+            profile['program'] ??
+            profile['course'] ??
+            'Unknown',
+        'yearLevel':
+            document.data()['yearLevel'] ?? profile['yearLevel'] ?? 'Unknown',
+      });
     }
     final byLanguage = <String, List<Map<String, dynamic>>>{};
     final byActivity = <String, List<Map<String, dynamic>>>{};
@@ -1133,35 +1160,37 @@ class AdminFirestoreService {
   }
 
   /// Fetch most active students by total XP.
-  Future<List<Map<String, dynamic>>> fetchTopStudentsByXp({
-    int limit = 10,
-  }) async {
-    final users = await _db
-        .collection('users')
-        .where('role', isEqualTo: 'student')
-        .limit(200)
-        .get();
-    final rows = <Map<String, dynamic>>[];
-    for (final user in users.docs) {
-      final profile = await _db.collection('user_profiles').doc(user.id).get();
-      final userData = user.data();
-      final profileData = profile.data() ?? const <String, dynamic>{};
-      rows.add({
-        'uid': user.id,
-        ...profileData,
-        'displayName':
-            userData['displayName'] ??
-            profileData['displayName'] ??
-            userData['email'] ??
-            'Learner',
-        'email': userData['email'] ?? '',
-        'role': 'student',
-      });
-    }
-    rows.sort(
-      (a, b) =>
-          ((b['totalXp'] as num?) ?? 0).compareTo((a['totalXp'] as num?) ?? 0),
-    );
-    return rows.take(limit).toList();
+  Future<List<Map<String, dynamic>>> fetchTopStudentsByXp() async {
+    // Reuse the canonical student merge so the report considers both
+    // user_profiles and progress, including legacy email-keyed user records
+    // whose progress is correctly stored under their Firebase UID.
+    final students = await fetchStudents();
+    final rows = students
+        .where((student) => student.normalizedRole == 'student')
+        .map(
+          (student) => <String, dynamic>{
+            'uid': student.uid,
+            'displayName': student.displayName,
+            'email': student.email,
+            'role': 'student',
+            'totalXp': student.totalXp,
+            'currentLevel': student.currentLevel,
+            'streakDays': student.streakDays,
+            'badgesEarned': student.badgesEarned,
+            'lastActivityAt': student.lastActivityAt,
+          },
+        )
+        .toList();
+    rows.sort((a, b) {
+      final xpOrder = (b['totalXp'] as int).compareTo(a['totalXp'] as int);
+      if (xpOrder != 0) return xpOrder;
+      final aActivity = a['lastActivityAt'] as DateTime? ?? DateTime(0);
+      final bActivity = b['lastActivityAt'] as DateTime? ?? DateTime(0);
+      return bActivity.compareTo(aActivity);
+    });
+    // Reports is an administrative roster, so do not truncate it to a public
+    // "top 10" leaderboard. Keeping every learner here also makes the learner
+    // count KPI reflect the complete student population.
+    return rows;
   }
 }

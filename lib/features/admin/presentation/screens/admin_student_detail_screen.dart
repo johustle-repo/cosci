@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -19,12 +21,28 @@ class AdminStudentDetailScreen extends StatefulWidget {
 }
 
 class _AdminStudentDetailScreenState extends State<AdminStudentDetailScreen> {
+  Timer? _progressRefreshTimer;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AdminStudentsProvider>().loadStudentDetail(widget.studentId);
     });
+    _progressRefreshTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (mounted) {
+        context.read<AdminStudentsProvider>().loadStudentDetail(
+          widget.studentId,
+          showLoading: false,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _progressRefreshTimer?.cancel();
+    super.dispose();
   }
 
   @override

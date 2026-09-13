@@ -15,6 +15,7 @@ class AdminStudentsProvider extends ChangeNotifier {
   AdminStudentProfile? _selectedStudent;
   bool _isLoading = false;
   bool _isDetailLoading = false;
+  bool _detailRequestInFlight = false;
   String? _error;
   String _searchQuery = '';
   String _filterStatus = 'all'; // all | active | inactive
@@ -57,17 +58,20 @@ class AdminStudentsProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> loadStudentDetail(String uid) async {
+  Future<void> loadStudentDetail(String uid, {bool showLoading = true}) async {
     if (_service == null) return;
-    _isDetailLoading = true;
-    _selectedStudent = null;
+    if (_detailRequestInFlight) return;
+    _detailRequestInFlight = true;
+    _isDetailLoading = showLoading;
+    if (showLoading) _selectedStudent = null;
     _error = null;
-    _notifySafely();
+    if (showLoading) _notifySafely();
     try {
       _selectedStudent = await _service!.fetchStudentById(uid);
     } catch (e) {
       _error = adminErrorMessage(e);
     } finally {
+      _detailRequestInFlight = false;
       _isDetailLoading = false;
       _notifySafely();
     }

@@ -41,15 +41,13 @@ import 'package:pseudocode_apk/shared/widgets/auth_guard.dart';
 import 'package:pseudocode_apk/shared/widgets/app_startup_screen.dart';
 
 class AppRouter {
-  const AppRouter({this.startupError});
-
-  final String? startupError;
+  const AppRouter();
 
   Route<dynamic> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
       // ── Startup & Auth ─────────────────────────────────────────────────────
       case AppRoutes.startup:
-        return _build(AppStartupScreen(startupError: startupError), settings);
+        return _build(const AppStartupScreen(), settings);
       case AppRoutes.login:
         return _build(const GuestGuard(child: LoginScreen()), settings);
       case AppRoutes.getStarted:

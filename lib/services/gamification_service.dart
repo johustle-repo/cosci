@@ -184,12 +184,18 @@ class GamificationService {
       final profileData = profileSnapshot.data() ?? <String, dynamic>{};
       final progressData = progressSnapshot.data() ?? <String, dynamic>{};
 
-      final previousXp =
+      // Both documents are maintained for compatibility with existing app
+      // versions. Use the largest stored value so a stale mirror can never
+      // reset a learner's accumulated XP.
+      final profileXp =
           _readInt(profileData['totalXp']) ??
           _readInt(profileData['points']) ??
+          0;
+      final progressXp =
           _readInt(progressData['totalXp']) ??
           _readInt(progressData['points']) ??
           0;
+      final previousXp = profileXp > progressXp ? profileXp : progressXp;
       final previousLevel = GamificationProfile.resolveLevel(
         previousXp,
         thresholds: configuredThresholds,
