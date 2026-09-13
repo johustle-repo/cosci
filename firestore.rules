@@ -18,10 +18,12 @@ service cloud.firestore {
     function staff() { return admin() || instructor(); }
     function verifiedLearner() {
       return signedIn() && (
+        (!('idVerificationStatus' in profile().data) &&
+          !('id_verification_status' in profile().data)) ||
         ('idVerificationStatus' in profile().data &&
-          profile().data.idVerificationStatus in ['approved', 'not_required']) ||
+          profile().data.idVerificationStatus in ['approved', 'legacy_approved', 'not_required']) ||
         ('id_verification_status' in profile().data &&
-          profile().data.id_verification_status in ['approved', 'not_required'])
+          profile().data.id_verification_status in ['approved', 'legacy_approved', 'not_required'])
       );
     }
     function validProgram(value) { return value in ['BS Information Technology', 'BS Computer Science', 'BS Mathematics', 'BS Mathematics-CIT']; }

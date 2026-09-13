@@ -3,10 +3,10 @@ import 'package:pseudocode_apk/models/app_user.dart';
 
 void main() {
   group('student ID verification gate', () {
-    test('student with a missing status must verify', () {
+    test('student with a missing status is grandfathered in', () {
       const user = AppUser(uid: 'student-1', email: 'student@psu.edu.ph');
 
-      expect(user.requiresIdVerification, isTrue);
+      expect(user.requiresIdVerification, isFalse);
     });
 
     test('only an explicitly approved student may continue', () {
