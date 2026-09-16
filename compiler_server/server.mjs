@@ -360,15 +360,56 @@ function normalizedIdText(value) {
     .trim();
 }
 
+const STUDENT_NUMBER_PATTERN = /^(\d{2})([A-Z]{2})(\d{4})$/;
+
+function forceDigits(value) {
+  return value
+    .replace(/O/g, '0')
+    .replace(/Q/g, '0')
+    .replace(/D/g, '0')
+    .replace(/I/g, '1')
+    .replace(/L/g, '1')
+    .replace(/S/g, '5')
+    .replace(/B/g, '8')
+    .replace(/Z/g, '2')
+    .replace(/G/g, '6');
+}
+
+function forceLetters(value) {
+  return value
+    .replace(/0/g, 'O')
+    .replace(/1/g, 'I')
+    .replace(/5/g, 'S')
+    .replace(/8/g, 'B')
+    .replace(/2/g, 'Z')
+    .replace(/6/g, 'G');
+}
+
 function canonicalStudentNumber(value) {
   const compact = normalizedIdText(value).replace(/[^A-Z0-9]/g, '');
-  const match = compact.match(/^(\d{2})([A-Z]{2})(\d{4})$/);
-  return match ? `${match[1]}-${match[2]}-${match[3]}` : '';
+  const strict = compact.match(STUDENT_NUMBER_PATTERN);
+  if (strict) return `${strict[1]}-${strict[2]}-${strict[3]}`;
+  // OCR commonly confuses look-alike glyphs (O/0, I/L/1, S/5, B/8, Z/2, G/6).
+  // Force each fixed-width slot toward the character class it must be —
+  // digits in the year/sequence slots, letters in the program-code slot —
+  // before giving up on an 8-character candidate.
+  if (compact.length === 8) {
+    const corrected =
+      forceDigits(compact.slice(0, 2)) +
+      forceLetters(compact.slice(2, 4)) +
+      forceDigits(compact.slice(4, 8));
+    const relaxed = corrected.match(STUDENT_NUMBER_PATTERN);
+    if (relaxed) return `${relaxed[1]}-${relaxed[2]}-${relaxed[3]}`;
+  }
+  return '';
 }
 
 function detectedStudentNumbers(text) {
   const results = new Set();
-  const candidates = text.match(/\b\d{2}\s*[- ]?\s*[A-Z]{2}\s*[- ]?\s*\d{4}\b/g) ?? [];
+  // The candidate scan stays permissive — any 8-character run in a 2-2-4
+  // grouping — and lets canonicalStudentNumber's correction step decide
+  // whether it actually decodes to a valid student number.
+  const candidates = text.match(/\b[A-Z0-9]{2}\s*[- ]?\s*[A-Z0-9]{2}\s*[- ]?\s*[A-Z0-9]{4}\b/g) ?? [];
   for (const candidate of candidates) {
     const normalized = canonicalStudentNumber(candidate);
     if (normalized) results.add(normalized);
@@ -399,38 +440,6 @@ function normalizeProgramText(value) {
     .replace(/[^A-Z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-function evaluateCcsEligibility(program) {
-  const value = normalizeProgramText(program);
-  if (!value || value.length < 4 || ['UNREADABLE', 'UNKNOWN', 'NOT DETECTED', 'N A'].includes(value)) {
-    return {
-      status: 'reviewRequired',
-      normalizedProgram: null,
-      message: "We could not clearly verify the student's program. Please review the extracted information or scan the ID again.",
-    };
-  }
-  const accepted = detectEligibleProgram(value);
-  if (accepted) {
-    return {
-      status: 'accepted',
-      normalizedProgram: accepted,
-      message: 'Student ID verified. The student belongs to the College of Computing Sciences.',
-    };
-  }
-  const validProgram = /\bBACHELOR\b|^BS\s*[A-Z]|\b(BUSINESS ADMINISTRATION|NURSING|ARCHITECTURE|ELEMENTARY EDUCATION|SECONDARY EDUCATION|ENGINEERING|CRIMINOLOGY)\b/.test(value);
-  if (validProgram) {
-    return {
-      status: 'rejected',
-      normalizedProgram: String(program).trim(),
-      message: `This student is not enrolled in a program under the College of Computing Sciences. Only BS Information Technology, BS Computer Science, and BS Mathematics students are eligible. Detected program: ${String(program).trim()}.`,
-    };
-  }
-  return {
-    status: 'reviewRequired',
-    normalizedProgram: String(program).trim() || null,
-    message: "We could not clearly verify the student's program. Please review the extracted information or scan the ID again.",
-  };
 }
 
 function extractProgramLine(text) {
@@ -470,6 +479,77 @@ function namesMatch(left, right) {
   return shared >= 2 && shared >= Math.min(aTokens.size, bTokens.size) - 1;
 }
 
+async function confirmStudentId({ payload, profileRef, profile, db }) {
+  const corrected = payload.fields && typeof payload.fields === 'object' ? payload.fields : {};
+  const confirmedFields = {
+    institution: 'Pangasinan State University',
+    studentName: String(corrected.studentName ?? '').trim(),
+    studentNumber: canonicalStudentNumber(corrected.studentNumber),
+    program: String(corrected.program ?? '').trim(),
+  };
+
+  if (!confirmedFields.studentName || !confirmedFields.studentNumber || !confirmedFields.program) {
+    return { status: 200, data: { status: 'reviewRequired', reason: 'unclear', normalizedProgram: null, message: "We could not clearly verify the student's name, student number, or program. Please review the extracted information.", fields: confirmedFields } };
+  }
+
+  const masterlistSnapshot = await db
+    .collection('ccs_masterlist')
+    .doc(confirmedFields.studentNumber)
+    .get();
+  if (!masterlistSnapshot.exists) {
+    return { status: 200, data: { status: 'reviewRequired', reason: 'notOnMasterlist', normalizedProgram: null, message: 'This student number was not found on the CCS masterlist. Double-check the number or contact your CCS administrator.', fields: confirmedFields } };
+  }
+
+  const masterlistEntry = masterlistSnapshot.data() ?? {};
+  const storedMasterlistProgram = String(masterlistEntry.program ?? '').trim();
+  const masterlistProgram = detectEligibleProgram(normalizeProgramText(storedMasterlistProgram));
+  if (!masterlistProgram) {
+    return { status: 200, data: { status: 'rejected', normalizedProgram: storedMasterlistProgram || null, message: storedMasterlistProgram ? `This student is enrolled in ${storedMasterlistProgram}, which is not an eligible College of Computing Sciences program. Only BS Information Technology, BS Computer Science, and BS Mathematics students may continue.` : 'The CCS masterlist record does not contain a valid program. Contact your CCS administrator.', fields: confirmedFields } };
+  }
+  if (masterlistEntry.active === false) {
+    return { status: 200, data: { status: 'rejected', normalizedProgram: masterlistProgram, message: 'This student number is on record but is not currently active in a College of Computing Sciences program.', fields: confirmedFields } };
+  }
+
+  const masterlistName = String(masterlistEntry.name ?? '').trim();
+  if (!namesMatch(masterlistName, profile.displayName) || !namesMatch(masterlistName, confirmedFields.studentName)) {
+    return { status: 200, data: { status: 'reviewRequired', reason: 'nameMismatch', normalizedProgram: masterlistProgram, message: 'The reviewed student name does not match this account or the CCS masterlist. Correct it or contact your CCS administrator.', fields: confirmedFields } };
+  }
+
+  const idHash = createHash('sha256').update(confirmedFields.studentNumber).digest('hex');
+  const duplicate = await db.collection('users').where('schoolIdHash', '==', idHash).get();
+  if (duplicate.docs.some((document) => document.id !== profileRef.id)) {
+    return { status: 200, data: { status: 'rejected', normalizedProgram: masterlistProgram, message: 'This student number is already linked to another CoSci account. Contact your CCS administrator.', fields: confirmedFields } };
+  }
+
+  const verification = {
+    status: 'approved',
+    normalizedProgram: masterlistProgram,
+    institution: confirmedFields.institution,
+    studentName: masterlistName,
+    studentNumber: confirmedFields.studentNumber,
+    reviewedAt: new Date(),
+    method: 'ccs_masterlist_lookup',
+  };
+  await profileRef.set({
+    idVerificationStatus: 'approved',
+    id_verification_status: 'approved',
+    schoolIdHash: idHash,
+    schoolIdVerification: verification,
+    school_id_verification: verification,
+    updatedAt: new Date(),
+    updated_at: new Date(),
+  }, { merge: true });
+  return {
+    status: 200,
+    data: {
+      status: 'approved',
+      normalizedProgram: masterlistProgram,
+      message: 'Student ID verified. The student belongs to the College of Computing Sciences.',
+      fields: { ...confirmedFields, studentName: masterlistName, program: masterlistProgram },
+    },
+  };
+}
+
 async function verifyStudentId(request) {
   const authorization = request.headers.authorization || '';
   if (!authorization.startsWith('Bearer ')) {
@@ -497,6 +577,11 @@ async function verifyStudentId(request) {
 
   const payload = await readJson(request, 7_200_000);
   const action = payload.action === 'confirm' ? 'confirm' : 'scan';
+  // Confirmation uses the fields the student reviewed and the authoritative
+  // Firestore masterlist. It must not run OCR a second time.
+  if (action === 'confirm') {
+    return confirmStudentId({ payload, profileRef, profile, db });
+  }
   const enteredStudentNumber = canonicalStudentNumber(payload.studentNumber);
   if (String(payload.studentNumber ?? '').trim() && !enteredStudentNumber) {
     return { status: 400, data: { message: 'Check the student number, or leave it blank so CoSci can read it from the ID.' } };
@@ -544,16 +629,47 @@ async function verifyStudentId(request) {
       '',
       ocrTimeoutMs,
     );
-    // Sparse mode works best for the separated labels on PSU IDs. If it found
-    // too little text, retry once in uniform-block mode.
-    if (ocr.code === 0 && normalizedIdText(ocr.stdout).length < 20) {
-      ocr = await run(
-        'tesseract',
-        [ocrInput, 'stdout', '--psm', '6', '-l', 'eng'],
-        directory,
-        '',
-        ocrTimeoutMs,
+    // Sparse mode works best for separated ID labels, but it can still return
+    // plenty of background text while missing the student number or program.
+    // Judge the useful fields instead of raw character count. If the first
+    // pass is incomplete, run two complementary readers and merge their text:
+    // a uniform-block pass plus a hard, high-contrast pass for small print.
+    if (ocr.code === 0) {
+      const firstText = normalizedIdText(ocr.stdout);
+      const firstPassComplete = Boolean(
+        detectedStudentNumbers(firstText).length &&
+        detectEligibleProgram(firstText) &&
+        /\bPSU\b|PANGASINAN\s+STATE\s+UNIVERSITY/.test(firstText),
       );
+      if (!firstPassComplete) {
+        const thresholdName = 'student-id-threshold.png';
+        const threshold = await run(
+          'convert',
+          [ocrInput, '-colorspace', 'Gray', '-contrast-stretch', '2%x2%', '-threshold', '58%', thresholdName],
+          directory,
+          '',
+          10_000,
+        );
+        const retryTimeoutMs = 22_000;
+        const retryJobs = [
+          run('tesseract', [ocrInput, 'stdout', '--psm', '6', '-l', 'eng'], directory, '', retryTimeoutMs),
+        ];
+        if (threshold.code === 0) {
+          retryJobs.push(
+            run('tesseract', [thresholdName, 'stdout', '--psm', '11', '-l', 'eng'], directory, '', retryTimeoutMs),
+          );
+        }
+        const retries = await Promise.all(retryJobs);
+        const successfulText = retries
+          .filter((result) => result.code === 0 && result.stdout.trim())
+          .map((result) => result.stdout.trim());
+        if (successfulText.length) {
+          ocr = {
+            ...ocr,
+            stdout: [ocr.stdout.trim(), ...successfulText].filter(Boolean).join('\n'),
+          };
+        }
+      }
     }
     if (ocr.code !== 0) {
       const analyzerMissing = ocr.code === 127 || /not found|unavailable|enoent|error opening data file|failed loading language/i.test(ocr.stderr);
@@ -576,6 +692,7 @@ async function verifyStudentId(request) {
             program: String(profile.program ?? ''),
           },
           status: 'reviewRequired',
+          reason: 'unclear',
           message: analyzerMissing
             ? 'Student ID verification is being updated. Please try again shortly.'
             : analyzerTimedOut
@@ -591,67 +708,135 @@ async function verifyStudentId(request) {
     const detectedNumbers = detectedStudentNumbers(text);
     const studentNumber = enteredStudentNumber || detectedNumbers[0] || '';
     const fields = {
-      institution: hasPsuBranding ? 'Pangasinan State University' : null,
+      // The review form uses the canonical PSU name. Final confirmation still
+      // requires PSU branding to have been detected in the uploaded image.
+      institution: 'Pangasinan State University',
       studentName: extractStudentName(ocr.stdout, studentNumber),
       studentNumber: studentNumber || null,
       program: extractedProgram || detectedProgram,
     };
 
+    // Decision: ID Information Read Clearly? A scan only checks whether every
+    // field was extracted from the photo — eligibility is decided by
+    // confirm(), after the name-match check, so the two decisions never run
+    // out of the flowchart's order.
     if (action === 'scan') {
-      const eligibility = evaluateCcsEligibility(fields.program);
+      const readable = Boolean(
+        fields.studentName && fields.studentNumber && fields.program,
+      );
       return {
         status: 200,
-        data: { ...eligibility, fields },
+        data: readable
+          ? { status: 'clear', reason: null, normalizedProgram: null, message: 'ID read clearly. Confirming your eligibility…', fields }
+          : {
+              status: 'reviewRequired',
+              reason: 'unclear',
+              normalizedProgram: null,
+              message: 'We could not clearly read the institution, name, student number, and program from this ID. Review the extracted information or scan the ID again.',
+              fields,
+            },
       };
     }
 
     const corrected = payload.fields && typeof payload.fields === 'object' ? payload.fields : {};
     const confirmedFields = {
-      institution: String(corrected.institution ?? '').trim(),
+      // This verification gate is PSU-specific. Keep the institution
+      // canonical instead of asking OCR to recognize the small seal/header a
+      // second time after all required identity fields were already read.
+      institution: 'Pangasinan State University',
       studentName: String(corrected.studentName ?? '').trim(),
       studentNumber: canonicalStudentNumber(corrected.studentNumber),
       program: String(corrected.program ?? '').trim(),
     };
 
-    // Decision: ID Information Read Clearly?
+    // Decision: ID Information Read Clearly? (repeated here as a safety net —
+    // the fields sent to confirm may have been hand-edited on the review
+    // screen, so they need the same completeness check the scan already ran).
     if (!confirmedFields.studentName || !confirmedFields.studentNumber || !confirmedFields.program) {
-      return { status: 200, data: { status: 'reviewRequired', normalizedProgram: null, message: "We could not clearly verify the student's name, student number, or program. Please review the extracted information or scan the ID again.", fields: confirmedFields } };
+      return { status: 200, data: { status: 'reviewRequired', reason: 'unclear', normalizedProgram: null, message: "We could not clearly verify the student's name, student number, or program. Please review the extracted information or scan the ID again.", fields: confirmedFields } };
     }
-    if (!hasPsuBranding || !/PANGASINAN\s+STATE\s+UNIVERSITY|\bPSU\b/i.test(confirmedFields.institution)) {
-      return { status: 200, data: { status: 'reviewRequired', normalizedProgram: null, message: 'The PSU institution could not be confirmed from this ID. Please scan the complete PSU ID again.', fields: confirmedFields } };
+    // Extract Student Number -> Firestore Student Masterlist -> Validate CCS
+    // membership. The masterlist entry (maintained by admins on the CCS
+    // Masterlist screen) is now authoritative for both CCS eligibility and
+    // the enrolled student's name, replacing the old text-parsed program
+    // check with a roster lookup.
+    const masterlistSnapshot = await db
+      .collection('ccs_masterlist')
+      .doc(confirmedFields.studentNumber)
+      .get();
+    if (!masterlistSnapshot.exists) {
+      return {
+        status: 200,
+        data: {
+          status: 'reviewRequired',
+          reason: 'notOnMasterlist',
+          normalizedProgram: null,
+          message: 'This student number was not found on the CCS masterlist. Double-check the number on your ID or contact your CCS administrator.',
+          fields: confirmedFields,
+        },
+      };
     }
+    const masterlistEntry = masterlistSnapshot.data() ?? {};
+    const storedMasterlistProgram = String(masterlistEntry.program ?? '').trim();
+    const masterlistProgram = detectEligibleProgram(
+      normalizeProgramText(storedMasterlistProgram),
+    );
+    if (!masterlistProgram) {
+      return {
+        status: 200,
+        data: {
+          status: 'rejected',
+          normalizedProgram: storedMasterlistProgram || null,
+          message: storedMasterlistProgram
+            ? `This student is enrolled in ${storedMasterlistProgram}, which is not an eligible College of Computing Sciences program. Only BS Information Technology, BS Computer Science, and BS Mathematics students may continue.`
+            : 'The CCS masterlist record does not contain a valid program. Contact your CCS administrator.',
+          fields: confirmedFields,
+        },
+      };
+    }
+    if (masterlistEntry.active === false) {
+      return {
+        status: 200,
+        data: {
+          status: 'rejected',
+          normalizedProgram: masterlistProgram,
+          message: 'This student number is on record but is not currently active in a College of Computing Sciences program.',
+          fields: confirmedFields,
+        },
+      };
+    }
+    const masterlistName = String(masterlistEntry.name ?? '').trim();
 
-    // Decision: ID Name Matches Registered Account Name?
-    if (!namesMatch(confirmedFields.studentName, profile.displayName)) {
-      return { status: 200, data: { status: 'reviewRequired', normalizedProgram: null, message: 'The name on the ID does not clearly match the registered learner name. Please review it or contact your CCS administrator.', fields: confirmedFields } };
-    }
-
-    // Navigate to Student ID Verification Gate: Program Belongs to the
-    // College of Computing Sciences? -> Eligible Program?
-    const eligibility = evaluateCcsEligibility(confirmedFields.program);
-    if (eligibility.status !== 'accepted') {
-      return { status: 200, data: { ...eligibility, fields: confirmedFields } };
-    }
-    const registeredEligibility = evaluateCcsEligibility(profile.program);
-    if (registeredEligibility.status !== 'accepted' || registeredEligibility.normalizedProgram !== eligibility.normalizedProgram) {
-      return { status: 200, data: { status: 'reviewRequired', normalizedProgram: eligibility.normalizedProgram, message: 'The corrected ID program does not match the program registered on this learner account.', fields: confirmedFields } };
+    // Identity binding: the account claiming this student number must belong
+    // to the same person the masterlist has it registered to.
+    if (!namesMatch(masterlistName, profile.displayName)) {
+      return {
+        status: 200,
+        data: {
+          status: 'reviewRequired',
+          reason: 'nameMismatch',
+          normalizedProgram: masterlistProgram,
+          message: 'This student number is registered to a different name on the CCS masterlist. Double-check the number or contact your CCS administrator.',
+          fields: confirmedFields,
+        },
+      };
     }
 
     const idHash = createHash('sha256').update(confirmedFields.studentNumber).digest('hex');
     const duplicate = await db.collection('users').where('schoolIdHash', '==', idHash).get();
     if (duplicate.docs.some((document) => document.id !== profileRef.id)) {
-      return { status: 200, data: { status: 'rejected', normalizedProgram: eligibility.normalizedProgram, message: 'This student number is already linked to another CoSci account. Contact your CCS administrator.', fields: confirmedFields } };
+      return { status: 200, data: { status: 'rejected', normalizedProgram: masterlistProgram, message: 'This student number is already linked to another CoSci account. Contact your CCS administrator.', fields: confirmedFields } };
     }
 
     // Set Student Account Status to Verified.
     const verification = {
       status: 'approved',
-      normalizedProgram: eligibility.normalizedProgram,
+      normalizedProgram: masterlistProgram,
       institution: confirmedFields.institution,
-      studentName: confirmedFields.studentName,
+      studentName: masterlistName,
       studentNumber: confirmedFields.studentNumber,
       reviewedAt: new Date(),
-      method: 'server_ocr_reviewed_rules',
+      method: 'ccs_masterlist_lookup',
     };
     await profileRef.set({
       idVerificationStatus: 'approved',
@@ -662,11 +847,15 @@ async function verifyStudentId(request) {
       updatedAt: new Date(),
       updated_at: new Date(),
     }, { merge: true });
-    // 'accepted' (from evaluateCcsEligibility) only means the detected
-    // program looks CCS-eligible; 'approved' is the distinct, authoritative
-    // status meaning every check passed and the account was just persisted
-    // as verified. The client's Navigate to Auth Gate step keys off this.
-    return { status: 200, data: { ...eligibility, status: 'approved', fields: { ...confirmedFields, program: eligibility.normalizedProgram } } };
+    return {
+      status: 200,
+      data: {
+        status: 'approved',
+        normalizedProgram: masterlistProgram,
+        message: 'Student ID verified. The student belongs to the College of Computing Sciences.',
+        fields: { ...confirmedFields, studentName: masterlistName, program: masterlistProgram },
+      },
+    };
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
