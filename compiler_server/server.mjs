@@ -492,43 +492,31 @@ async function confirmStudentId({ payload, profileRef, profile, db }) {
     return { status: 200, data: { status: 'reviewRequired', reason: 'unclear', normalizedProgram: null, message: "We could not clearly verify the student's name, student number, or program. Please review the extracted information.", fields: confirmedFields } };
   }
 
-  const masterlistSnapshot = await db
-    .collection('ccs_masterlist')
-    .doc(confirmedFields.studentNumber)
-    .get();
-  if (!masterlistSnapshot.exists) {
-    return { status: 200, data: { status: 'reviewRequired', reason: 'notOnMasterlist', normalizedProgram: null, message: 'This student number was not found on the CCS masterlist. Double-check the number or contact your CCS administrator.', fields: confirmedFields } };
+  const normalizedProgram = detectEligibleProgram(
+    normalizeProgramText(confirmedFields.program),
+  );
+  if (!normalizedProgram) {
+    return { status: 200, data: { status: 'rejected', normalizedProgram: confirmedFields.program, message: 'This system is only available to BS Information Technology, BS Computer Science, and BS Mathematics students.', fields: confirmedFields } };
   }
 
-  const masterlistEntry = masterlistSnapshot.data() ?? {};
-  const storedMasterlistProgram = String(masterlistEntry.program ?? '').trim();
-  const masterlistProgram = detectEligibleProgram(normalizeProgramText(storedMasterlistProgram));
-  if (!masterlistProgram) {
-    return { status: 200, data: { status: 'rejected', normalizedProgram: storedMasterlistProgram || null, message: storedMasterlistProgram ? `This student is enrolled in ${storedMasterlistProgram}, which is not an eligible College of Computing Sciences program. Only BS Information Technology, BS Computer Science, and BS Mathematics students may continue.` : 'The CCS masterlist record does not contain a valid program. Contact your CCS administrator.', fields: confirmedFields } };
-  }
-  if (masterlistEntry.active === false) {
-    return { status: 200, data: { status: 'rejected', normalizedProgram: masterlistProgram, message: 'This student number is on record but is not currently active in a College of Computing Sciences program.', fields: confirmedFields } };
-  }
-
-  const masterlistName = String(masterlistEntry.name ?? '').trim();
-  if (!namesMatch(masterlistName, profile.displayName) || !namesMatch(masterlistName, confirmedFields.studentName)) {
-    return { status: 200, data: { status: 'reviewRequired', reason: 'nameMismatch', normalizedProgram: masterlistProgram, message: 'The reviewed student name does not match this account or the CCS masterlist. Correct it or contact your CCS administrator.', fields: confirmedFields } };
+  if (!namesMatch(confirmedFields.studentName, profile.displayName)) {
+    return { status: 200, data: { status: 'reviewRequired', reason: 'nameMismatch', normalizedProgram, message: 'The reviewed student name does not match the registered account name. Correct it and try again.', fields: confirmedFields } };
   }
 
   const idHash = createHash('sha256').update(confirmedFields.studentNumber).digest('hex');
   const duplicate = await db.collection('users').where('schoolIdHash', '==', idHash).get();
   if (duplicate.docs.some((document) => document.id !== profileRef.id)) {
-    return { status: 200, data: { status: 'rejected', normalizedProgram: masterlistProgram, message: 'This student number is already linked to another CoSci account. Contact your CCS administrator.', fields: confirmedFields } };
+    return { status: 200, data: { status: 'rejected', normalizedProgram, message: 'This student number is already linked to another CoSci account. Contact your CCS administrator.', fields: confirmedFields } };
   }
 
   const verification = {
     status: 'approved',
-    normalizedProgram: masterlistProgram,
+    normalizedProgram,
     institution: confirmedFields.institution,
-    studentName: masterlistName,
+    studentName: confirmedFields.studentName,
     studentNumber: confirmedFields.studentNumber,
     reviewedAt: new Date(),
-    method: 'ccs_masterlist_lookup',
+    method: 'reviewed_ocr_fields',
   };
   await profileRef.set({
     idVerificationStatus: 'approved',
@@ -543,9 +531,9 @@ async function confirmStudentId({ payload, profileRef, profile, db }) {
     status: 200,
     data: {
       status: 'approved',
-      normalizedProgram: masterlistProgram,
+      normalizedProgram,
       message: 'Student ID verified. The student belongs to the College of Computing Sciences.',
-      fields: { ...confirmedFields, studentName: masterlistName, program: masterlistProgram },
+      fields: { ...confirmedFields, program: normalizedProgram },
     },
   };
 }
