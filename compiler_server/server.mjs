@@ -933,6 +933,14 @@ async function execute(payload) {
   const source = payload.files?.[0]?.content;
   const requestedFileName = payload.files?.[0]?.name;
   const stdin = typeof payload.stdin === 'string' ? payload.stdin : '';
+  const requestedCompileTimeout = Number(payload.compile_timeout);
+  const requestedRunTimeout = Number(payload.run_timeout);
+  const compileTimeout = Number.isFinite(requestedCompileTimeout)
+    ? Math.min(Math.max(requestedCompileTimeout, 7_000), 15_000)
+    : 12_000;
+  const runTimeout = Number.isFinite(requestedRunTimeout)
+    ? Math.min(Math.max(requestedRunTimeout, 2_000), 8_000)
+    : 5_000;
   if (!language) throw new Error('Supported languages are C++, Java, and JavaScript.');
   if (typeof source !== 'string' || !source.trim()) throw new Error('Source code is required.');
   if (Buffer.byteLength(source, 'utf8') > maxSourceBytes) throw new Error('Source code exceeds 50 KB.');
@@ -944,7 +952,7 @@ async function execute(payload) {
     directory = await mkdtemp(join(jobsDirectory, 'cosci-'));
     if (language === 'javascript') {
       await writeFile(join(directory, 'main.js'), source, 'utf8');
-      const result = await run('node', ['--no-warnings', 'main.js'], directory, stdin);
+      const result = await run('node', ['--no-warnings', 'main.js'], directory, stdin, runTimeout);
       return { language, version: process.version, run: result };
     }
     if (language === 'c++') {
@@ -954,6 +962,8 @@ async function execute(payload) {
         'g++',
         ['-std=c++17', '-O0', '-Wall', '-Wextra', 'main.cpp', '-o', executable],
         directory,
+        '',
+        compileTimeout,
       );
       if (compile.code !== 0) return { language, version: 'system', compile };
       const runResult = await run(
@@ -961,15 +971,28 @@ async function execute(payload) {
         [],
         directory,
         stdin,
+        runTimeout,
       );
       return { language, version: 'system', compile: { code: 0, stdout: '', stderr: '' }, run: runResult };
     }
     const javaClass = javaEntryPoint(source, requestedFileName);
     const javaFile = `${javaClass}.java`;
     await writeFile(join(directory, javaFile), source, 'utf8');
-    const compile = await run('javac', ['-encoding', 'UTF-8', javaFile], directory);
+    const compile = await run(
+      'javac',
+      ['-encoding', 'UTF-8', javaFile],
+      directory,
+      '',
+      compileTimeout,
+    );
     if (compile.code !== 0) return { language, version: 'system', compile };
-    const runResult = await run('java', ['-Xmx128m', '-cp', directory, javaClass], directory, stdin);
+    const runResult = await run(
+      'java',
+      ['-Xmx128m', '-cp', directory, javaClass],
+      directory,
+      stdin,
+      runTimeout,
+    );
     return { language, version: 'system', compile: { code: 0, stdout: '', stderr: '' }, run: runResult };
   } finally {
     activeJobs -= 1;
