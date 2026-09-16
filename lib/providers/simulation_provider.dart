@@ -183,6 +183,55 @@ class SimulationProvider extends ChangeNotifier {
     _authProvider = authProvider;
   }
 
+  CodeSimulationActivity _personalizedWarmup() {
+    final accountName = _authProvider?.currentUser?.displayName?.trim();
+    final expectedName = accountName == null || accountName.isEmpty
+        ? 'Student'
+        : accountName;
+    return CodeSimulationActivity(
+      id: 'built-in-print-student-name',
+      title: 'Practice Task: Print Your Name',
+      topic: 'Output Statements',
+      language: 'C++',
+      difficulty: 'Easy',
+      starterCode: '''#include <iostream>
+using namespace std;
+
+int main() {
+  // Task: replace the text below with your account name.
+  cout << "Type your name here";
+  return 0;
+}''',
+      expectedOutput: expectedName,
+      instructions:
+          'Edit the output statement so the program prints exactly: $expectedName. '
+          'Press Run Code to test your work, review the console output, then submit the task.',
+      xpReward: 10,
+      problemGoal: 'Print your registered student name exactly as shown.',
+      inputsDescription: 'No input is required for this activity.',
+      algorithmSteps: const [
+        'Locate the text inside the cout statement.',
+        'Replace it with your registered student name.',
+        'Run the program and compare the console output with the task.',
+        'Submit when the output matches exactly.',
+      ],
+      keyConcepts: const ['cout', 'String literals', 'Program output'],
+      commonMistakes:
+          'Avoid adding labels such as "Name:" unless the task asks for them. Spelling and spaces must match.',
+      hints: const [
+        'Only change the text between the quotation marks.',
+        'The output comparison ignores trailing line breaks but not spelling differences.',
+      ],
+      errorFocus: 'Output',
+      testCases: [
+        SimulationTestCase(
+          name: 'Print registered name',
+          expectedOutput: expectedName,
+        ),
+      ],
+    );
+  }
+
   Future<void> loadActivities({bool forceRefresh = false}) async {
     if (_simulationService == null || _isLoadingActivities) {
       return;
@@ -196,7 +245,12 @@ class SimulationProvider extends ChangeNotifier {
 
     try {
       _compilerHealth = await const CompilerService().checkHealth();
-      _activities = await _simulationService!.fetchActivities();
+      final publishedActivities = await _simulationService!.fetchActivities();
+      final warmup = _personalizedWarmup();
+      _activities = [
+        warmup,
+        ...publishedActivities.where((activity) => activity.id != warmup.id),
+      ];
       if (_selectedActivity == null && _activities.isNotEmpty) {
         selectActivity(_activities.first);
         await restoreDraft();

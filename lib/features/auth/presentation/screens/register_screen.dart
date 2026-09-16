@@ -177,12 +177,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
             const SizedBox(height: 16),
             AuthTextField(
               controller: _emailController,
-              label: 'Email address',
+              label: 'PSU institutional email',
               hintText: 'student@psu.edu.ph',
               prefixIcon: Icons.alternate_email_rounded,
               keyboardType: TextInputType.emailAddress,
               textInputAction: TextInputAction.next,
-              validator: AuthValidators.validateEmail,
+              validator: AuthValidators.validateInstitutionalEmail,
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(

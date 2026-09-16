@@ -10,6 +10,21 @@ import 'package:pseudocode_apk/services/code_simulation_service.dart';
 import 'package:pseudocode_apk/models/code_simulation_activity.dart';
 import 'package:pseudocode_apk/shared/widgets/app_scaffold.dart';
 
+String _taskDisplayTitle(CodeSimulationActivity activity) {
+  final goal = activity.problemGoal.trim();
+  if (goal.isNotEmpty && goal.length <= 90) return goal;
+
+  final lessonTitle = activity.title
+      .replaceFirst(RegExp(r'\s*[—-]\s*Interactive Simulation\s*$'), '')
+      .trim();
+  if (lessonTitle.toLowerCase().startsWith('practice task:')) {
+    return lessonTitle;
+  }
+  return lessonTitle.isEmpty
+      ? 'Coding Practice Task'
+      : 'Practice: $lessonTitle';
+}
+
 class CodeSimulationScreen extends StatefulWidget {
   const CodeSimulationScreen({super.key, this.embedded = false});
 
@@ -106,10 +121,7 @@ class _CodeSimulationScreenState extends State<CodeSimulationScreen> {
     final message = gamification.errorMessage ?? gamification.statusMessage;
     if (message != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(seconds: 3),
-        ),
+        SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
       );
     }
   }
@@ -126,10 +138,7 @@ class _CodeSimulationScreenState extends State<CodeSimulationScreen> {
         : '${provider.selectedLanguage.label} simulation found an issue.';
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 3),
-      ),
+      SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
     );
   }
 
@@ -441,6 +450,7 @@ class _CodeSimulationScreenState extends State<CodeSimulationScreen> {
                           : null,
                       isExpanded: true,
                       dropdownColor: Colors.white,
+                      focusColor: Colors.transparent,
                       menuMaxHeight: 280,
                       itemHeight: null,
                       borderRadius: BorderRadius.circular(16),
@@ -449,7 +459,7 @@ class _CodeSimulationScreenState extends State<CodeSimulationScreen> {
                           return Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              activity.title,
+                              _taskDisplayTitle(activity),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -467,22 +477,72 @@ class _CodeSimulationScreenState extends State<CodeSimulationScreen> {
                         border: OutlineInputBorder(),
                       ),
                       items: visibleActivities.map((activity) {
+                        final isSelected = activity.id == selectedActivity?.id;
                         return DropdownMenuItem<String>(
                           value: activity.id,
                           child: Container(
-                            color: Colors.white,
-                            constraints: const BoxConstraints(minHeight: 54),
-                            padding: const EdgeInsets.symmetric(vertical: 9),
+                            width: double.infinity,
+                            constraints: const BoxConstraints(minHeight: 62),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 9,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? const Color(0xFFEAF2FF)
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                             alignment: Alignment.centerLeft,
-                            child: Text(
-                              activity.title,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFF0F172A),
-                                fontWeight: FontWeight.w600,
-                                height: 1.3,
-                              ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 34,
+                                  height: 34,
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? const Color(0xFFD6E6FF)
+                                        : const Color(0xFFF1F5F9),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Icon(
+                                    isSelected
+                                        ? Icons.check_rounded
+                                        : Icons.code_rounded,
+                                    size: 18,
+                                    color: const Color(0xFF1746A2),
+                                  ),
+                                ),
+                                const SizedBox(width: 11),
+                                Expanded(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _taskDisplayTitle(activity),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Color(0xFF0F172A),
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        '${activity.language} • ${activity.difficulty} • ${activity.xpReward} XP',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Color(0xFF64748B),
+                                          fontSize: 11.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         );
@@ -525,7 +585,7 @@ class _CodeSimulationScreenState extends State<CodeSimulationScreen> {
                         ),
                         SizedBox(width: 8),
                         Text(
-                          'Selected simulation content',
+                          'Your coding task',
                           style: TextStyle(
                             color: Color(0xFF123D9B),
                             fontWeight: FontWeight.w800,
@@ -535,7 +595,7 @@ class _CodeSimulationScreenState extends State<CodeSimulationScreen> {
                     ),
                     const SizedBox(height: 14),
                     Text(
-                      selectedActivity.title,
+                      _taskDisplayTitle(selectedActivity),
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w800,
                       ),
@@ -884,6 +944,13 @@ class _CodeSimulationScreenState extends State<CodeSimulationScreen> {
             ),
           ),
           const SizedBox(height: 18),
+          if (selectedActivity != null) ...[
+            _WorkspaceTaskBanner(
+              activity: selectedActivity,
+              completed: simulationProvider.lastSubmissionCorrect,
+            ),
+            const SizedBox(height: 18),
+          ],
           LayoutBuilder(
             builder: (context, constraints) {
               if (constraints.maxWidth > 980) {
@@ -994,6 +1061,132 @@ class _CodeSimulationScreenState extends State<CodeSimulationScreen> {
       title: 'Code Simulation',
       body: content,
       maxContentWidth: 1440,
+    );
+  }
+}
+
+class _WorkspaceTaskBanner extends StatelessWidget {
+  const _WorkspaceTaskBanner({required this.activity, required this.completed});
+
+  final CodeSimulationActivity activity;
+  final bool completed;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = completed
+        ? const Color(0xFF087B61)
+        : const Color(0xFF1746A2);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: completed
+              ? const [Color(0xFFEAFBF5), Color(0xFFF4FFFB)]
+              : const [Color(0xFFEAF2FF), Color(0xFFF7FAFF)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: completed ? const Color(0xFF9DE2CB) : const Color(0xFFBFD4F5),
+        ),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final details = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    completed ? Icons.task_alt_rounded : Icons.flag_rounded,
+                    color: accent,
+                    size: 21,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    completed ? 'Task completed' : 'Your task',
+                    style: TextStyle(
+                      color: accent,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 9),
+              Text(
+                _taskDisplayTitle(activity),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                activity.instructions,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(height: 1.45),
+              ),
+            ],
+          );
+
+          final target = Container(
+            constraints: const BoxConstraints(minWidth: 210),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.88),
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: const Color(0xFFD5E4F8)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'TARGET OUTPUT',
+                  style: TextStyle(
+                    color: Color(0xFF64748B),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.7,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                SelectableText(
+                  activity.expectedOutput,
+                  style: const TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '+${activity.xpReward} XP after passing',
+                  style: TextStyle(
+                    color: accent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          );
+
+          if (constraints.maxWidth >= 720) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(child: details),
+                const SizedBox(width: 20),
+                target,
+              ],
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [details, const SizedBox(height: 14), target],
+          );
+        },
+      ),
     );
   }
 }

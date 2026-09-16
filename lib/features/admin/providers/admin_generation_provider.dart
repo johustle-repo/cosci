@@ -7,7 +7,7 @@ import 'package:pseudocode_apk/features/admin/services/admin_ai_generation_servi
 import 'package:pseudocode_apk/features/admin/services/admin_log_service.dart';
 import 'package:pseudocode_apk/features/admin/services/admin_syllabus_service.dart';
 
-/// Drives the AI content-generation pipeline.
+/// Drives the content-generation pipeline.
 ///
 /// For each content type (lesson / quiz / puzzle / simulation), it:
 ///   1. Creates a [AdminContentGenerationJob] in Firestore.

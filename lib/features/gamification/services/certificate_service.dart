@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -436,6 +437,17 @@ class CertificateService {
 
   Future<({pw.Font regular, pw.Font semiBold, pw.Font bold})>
   _loadCertificateFonts() async {
+    // Embedding several large TrueType fonts makes certificate generation
+    // noticeably slow on Flutter web, especially on lower-powered phones. The
+    // built-in PDF fonts preserve a clean result without blocking the UI.
+    if (kIsWeb) {
+      return (
+        regular: pw.Font.helvetica(),
+        semiBold: pw.Font.helveticaBold(),
+        bold: pw.Font.helveticaBold(),
+      );
+    }
+
     try {
       return (
         regular: pw.Font.ttf(

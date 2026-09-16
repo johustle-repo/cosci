@@ -10,6 +10,7 @@ import 'package:pseudocode_apk/features/admin/presentation/screens/admin_dashboa
 import 'package:pseudocode_apk/features/admin/presentation/screens/admin_gamification_screen.dart';
 import 'package:pseudocode_apk/features/admin/presentation/screens/admin_lessons_screen.dart';
 import 'package:pseudocode_apk/features/admin/presentation/screens/admin_lesson_generator_screen.dart';
+import 'package:pseudocode_apk/features/admin/presentation/screens/admin_masterlist_screen.dart';
 import 'package:pseudocode_apk/features/admin/presentation/screens/admin_puzzles_screen.dart';
 import 'package:pseudocode_apk/features/admin/presentation/screens/admin_quizzes_screen.dart';
 import 'package:pseudocode_apk/features/admin/presentation/screens/admin_reports_screen.dart';
@@ -166,6 +167,11 @@ class AppRouter {
         );
       case AppRoutes.adminStudents:
         return _build(const AdminGuard(child: AdminStudentsScreen()), settings);
+      case AppRoutes.adminMasterlist:
+        return _build(
+          const AdminGuard(child: AdminMasterlistScreen()),
+          settings,
+        );
       case AppRoutes.adminStudentDetail:
         final studentId = settings.arguments as String?;
         return _build(
@@ -215,7 +221,7 @@ class AppRouter {
           settings,
         );
 
-      // ── Syllabus & AI generation routes ─────────────────────────────────
+      // ── Syllabus and content-generation routes ──────────────────────────
       case AppRoutes.adminSyllabus:
         return _build(const AdminGuard(child: AdminSyllabusScreen()), settings);
       case AppRoutes.adminSyllabusDetail:

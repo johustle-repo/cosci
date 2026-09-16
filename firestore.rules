@@ -93,6 +93,12 @@ service cloud.firestore {
     match /settings_backups/{backupId} {
       allow read, write: if admin();
     }
+    // Roster the ID-verification pipeline checks a scanned student number
+    // against (see compiler_server/server.mjs's confirm action, which reads
+    // this collection with the Admin SDK and so bypasses these rules).
+    match /ccs_masterlist/{studentNumber} {
+      allow read, write: if admin();
+    }
     match /{collection}/{document=**} {
       allow read: if ((verifiedLearner() || staff()) && collection in [
         'lessons', 'simulations', 'quizzes', 'puzzles', 'daily_challenges',

@@ -18,6 +18,7 @@ class AdminStudentProfile {
     required this.completedQuizzes,
     required this.completedPuzzles,
     required this.completedChallenges,
+    this.idVerificationStatus = 'required',
     this.yearLevel,
     this.photoUrl,
     this.lastLoginAt,
@@ -46,11 +47,15 @@ class AdminStudentProfile {
   final int completedQuizzes;
   final int completedPuzzles;
   final int completedChallenges;
+  final String idVerificationStatus;
   final String? yearLevel;
   final String? photoUrl;
   final DateTime? lastLoginAt;
   final DateTime? createdAt;
   final DateTime? lastActivityAt;
+
+  bool get isIdVerified =>
+      idVerificationStatus.trim().toLowerCase() == 'approved';
 
   AdminStudentProfile copyWith({bool? isActive, String? role}) {
     return AdminStudentProfile(
@@ -68,6 +73,7 @@ class AdminStudentProfile {
       completedQuizzes: completedQuizzes,
       completedPuzzles: completedPuzzles,
       completedChallenges: completedChallenges,
+      idVerificationStatus: idVerificationStatus,
       yearLevel: yearLevel,
       photoUrl: photoUrl,
       lastLoginAt: lastLoginAt,
@@ -105,6 +111,10 @@ class AdminStudentProfile {
   }) {
     final p = profileMap ?? {};
     final pr = progressMap ?? {};
+    final verification = userMap['schoolIdVerification'];
+    final verificationMap = verification is Map<String, dynamic>
+        ? verification
+        : const <String, dynamic>{};
     return AdminStudentProfile(
       uid: uid,
       email: userMap['email'] as String? ?? '',
@@ -127,6 +137,11 @@ class AdminStudentProfile {
       completedQuizzes: (pr['completedQuizzes'] as num?)?.toInt() ?? 0,
       completedPuzzles: (pr['completedPuzzles'] as num?)?.toInt() ?? 0,
       completedChallenges: (pr['completedChallenges'] as num?)?.toInt() ?? 0,
+      idVerificationStatus:
+          userMap['idVerificationStatus'] as String? ??
+          userMap['id_verification_status'] as String? ??
+          verificationMap['status'] as String? ??
+          'required',
       lastLoginAt: _toDateTime(userMap['lastLoginAt']),
       createdAt: _toDateTime(userMap['createdAt']),
       lastActivityAt: _toDateTime(p['lastActivityAt']),

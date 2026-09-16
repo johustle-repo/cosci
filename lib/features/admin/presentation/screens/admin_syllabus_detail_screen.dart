@@ -372,8 +372,8 @@ class _AnalysisPanel extends StatelessWidget {
       header: _PanelHeader(
         icon: Icons.auto_awesome_rounded,
         iconColor: _blue,
-        title: 'AI Syllabus Analysis',
-        subtitle: 'Extract topics, units and learning outcomes using Groq AI',
+        title: 'Syllabus Analysis',
+        subtitle: 'Extract topics, units and learning outcomes automatically',
         trailing: FilledButton.icon(
           onPressed: sp.isAnalyzing ? null : () => _runAnalysis(context, sp),
           icon: sp.isAnalyzing
@@ -493,7 +493,7 @@ class _AnalyzingPlaceholder extends StatelessWidget {
           CircularProgressIndicator(color: _blue, strokeWidth: 2.5),
           SizedBox(height: 16),
           Text(
-            'Groq AI is analysing your syllabus…',
+            'Your syllabus is being analysed…',
             style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 14,
@@ -550,7 +550,7 @@ class _AnalysisEmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Click "Analyse Syllabus" to extract topics, units and\nlearning outcomes with Groq AI.',
+            'Click "Analyse Syllabus" to extract topics, units and\nlearning outcomes automatically.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 13, color: _textSub),
           ),
@@ -892,7 +892,7 @@ class _GenerationPanel extends StatelessWidget {
             iconColor: const Color(0xFFD97706),
             title: 'Generate Content',
             subtitle:
-                'AI-generate lessons, quizzes, puzzles & simulations for all '
+                'Generate lessons, quizzes, puzzles & simulations for all '
                 '${analysis.units.length} unit(s)',
             trailing: TextButton.icon(
               onPressed: () => Navigator.pushNamed(
@@ -1442,7 +1442,7 @@ class _PasteTextDialogState extends State<_PasteTextDialog> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text(
-                    'Paste the full text of the syllabus. Groq AI will extract topics, '
+                    'Paste the full text of the syllabus. The content tool will extract topics, '
                     'units and learning outcomes.',
                     style: TextStyle(fontSize: 13, color: _textSub),
                   ),
@@ -1610,7 +1610,7 @@ class _ConfirmGenerateDialog extends StatelessWidget {
                 children: [
                   _AlertBar(
                     message:
-                        'This will use Groq AI to generate $type for all $unitCount '
+                        'This will generate $type for all $unitCount '
                         'unit(s). Content will be saved in draft status for review.',
                     type: _AlertType.info,
                   ),

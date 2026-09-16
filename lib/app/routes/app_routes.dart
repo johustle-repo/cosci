@@ -28,6 +28,7 @@ class AppRoutes {
   static const String adminHome = '/admin-home';
   static const String adminStudents = '/admin/students';
   static const String adminStudentDetail = '/admin/students/detail';
+  static const String adminMasterlist = '/admin/masterlist';
   static const String adminLessons = '/admin/lessons';
   static const String adminLessonGenerator = '/admin/lessons/generate';
   static const String adminSimulations = '/admin/simulations';
@@ -40,7 +41,7 @@ class AppRoutes {
   static const String adminSettings = '/admin/settings';
   static const String adminActivityLogs = '/admin/activity-logs';
 
-  // ── Syllabus & AI generation routes ─────────────────────────────────────────
+  // ── Syllabus and content-generation routes ──────────────────────────────────
   static const String adminSyllabus = '/admin/syllabus';
   static const String adminSyllabusDetail = '/admin/syllabus/detail';
   static const String adminGenerationJobs = '/admin/generation-jobs';

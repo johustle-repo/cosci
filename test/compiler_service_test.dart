@@ -28,7 +28,7 @@ void main() {
       endpoint: 'https://compiler.test/execute',
       client: MockClient((request) async {
         final body = jsonDecode(request.body) as Map<String, dynamic>;
-        expect(body['stdin'], '7');
+        expect(body['stdin'], '7\n');
         return http.Response(
           jsonEncode({
             'compile': {'code': 1, 'stderr': 'Main.java:1: error'},
@@ -115,6 +115,65 @@ void main() {
 
     expect(result.status, ExecutionStatus.timedOut);
     expect(result.message, contains('stopped safely'));
+  });
+
+  test('explains when a Java Scanner is missing standard input', () async {
+    final service = CompilerService(
+      endpoint: 'https://compiler.test/execute',
+      client: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'compile': {'code': 0, 'stderr': ''},
+            'run': {
+              'code': 1,
+              'stderr':
+                  'Exception in thread "main" java.util.NoSuchElementException: No line found\n'
+                  ' at java.base/java.util.Scanner.nextLine(Scanner.java:1651)',
+            },
+          }),
+          200,
+        ),
+      ),
+    );
+
+    final result = await service.execute(
+      language: ProgrammingLanguage.java,
+      sourceCode: 'public class Main {}',
+    );
+
+    expect(result.status, ExecutionStatus.runtimeError);
+    expect(result.output, isEmpty);
+    expect(result.message, contains('Input required'));
+  });
+
+  test('explains when a Java program needs additional input', () async {
+    final service = CompilerService(
+      endpoint: 'https://compiler.test/execute',
+      client: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'compile': {'code': 0, 'stderr': ''},
+            'run': {
+              'code': 1,
+              'stderr':
+                  'java.util.NoSuchElementException: No line found\n'
+                  ' at java.base/java.util.Scanner.nextLine(Scanner.java:1651)',
+            },
+          }),
+          200,
+        ),
+      ),
+    );
+
+    final result = await service.execute(
+      language: ProgrammingLanguage.java,
+      sourceCode: 'public class Main {}',
+      stdin: '40',
+    );
+
+    expect(result.status, ExecutionStatus.runtimeError);
+    expect(result.output, isEmpty);
+    expect(result.message, contains('Not enough standard input'));
   });
 
   test('reports compiler runtime health', () async {

@@ -7,6 +7,7 @@ import 'package:pseudocode_apk/features/admin/providers/admin_gamification_provi
 import 'package:pseudocode_apk/features/admin/providers/admin_generation_provider.dart';
 import 'package:pseudocode_apk/features/admin/providers/admin_lessons_provider.dart';
 import 'package:pseudocode_apk/features/admin/providers/admin_logs_provider.dart';
+import 'package:pseudocode_apk/features/admin/providers/admin_masterlist_provider.dart';
 import 'package:pseudocode_apk/features/admin/providers/admin_puzzles_provider.dart';
 import 'package:pseudocode_apk/features/admin/providers/admin_quizzes_provider.dart';
 import 'package:pseudocode_apk/features/admin/providers/admin_reports_provider.dart';
@@ -228,6 +229,15 @@ class AppProviders {
     ChangeNotifierProxyProvider2<
       AdminFirestoreService,
       AdminLogService,
+      AdminMasterlistProvider
+    >(
+      create: (_) => AdminMasterlistProvider(),
+      update: (_, adminService, logger, provider) =>
+          provider!..attach(adminService, logger),
+    ),
+    ChangeNotifierProxyProvider2<
+      AdminFirestoreService,
+      AdminLogService,
       AdminGamificationProvider
     >(
       create: (_) => AdminGamificationProvider(),
@@ -262,7 +272,7 @@ class AppProviders {
           provider!..attach(adminService, logger),
     ),
 
-    // ── Syllabus & AI generation services ─────────────────────────────────
+    // ── Syllabus and content-generation services ──────────────────────────
     // AdminAiGenerationService is a singleton that holds the API key in memory.
     Provider<AdminAiGenerationService>(
       create: (_) => AdminAiGenerationService(),
@@ -272,7 +282,7 @@ class AppProviders {
           previous ?? AdminSyllabusService(firestoreService: firestoreService),
     ),
 
-    // ── Syllabus & AI generation providers ────────────────────────────────
+    // ── Syllabus and content-generation providers ─────────────────────────
     // Both providers need: AdminSyllabusService + AdminAiGenerationService + AdminLogService.
     ChangeNotifierProxyProvider3<
       AdminSyllabusService,

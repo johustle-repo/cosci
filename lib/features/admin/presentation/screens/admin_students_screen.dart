@@ -382,8 +382,8 @@ class _StudentsTable extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final tableWidth = constraints.maxWidth < 1240
-            ? 1240.0
+        final tableWidth = constraints.maxWidth < 1360
+            ? 1360.0
             : constraints.maxWidth;
 
         return Container(
@@ -429,6 +429,10 @@ class _StudentsTable extends StatelessWidget {
                         SizedBox(width: 80, child: _H('XP', center: true)),
                         SizedBox(width: 70, child: _H('Streak', center: true)),
                         SizedBox(width: 70, child: _H('Badges', center: true)),
+                        SizedBox(
+                          width: 118,
+                          child: _H('ID Verification', center: true),
+                        ),
                         SizedBox(width: 100, child: _H('Status')),
                         SizedBox(width: 12),
                         SizedBox(
@@ -819,6 +823,12 @@ class _StudentRow extends StatelessWidget {
 
               // Status badge
               SizedBox(
+                width: 118,
+                child: _IdVerificationBadge(student: student),
+              ),
+
+              // Account status badge
+              SizedBox(
                 width: 100,
                 child: _ActiveBadge(isActive: student.isActive),
               ),
@@ -1003,6 +1013,66 @@ class _ActiveBadge extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _IdVerificationBadge extends StatelessWidget {
+  const _IdVerificationBadge({required this.student});
+
+  final AdminStudentProfile student;
+
+  @override
+  Widget build(BuildContext context) {
+    final isStudent = student.normalizedRole == 'student';
+    final verified = isStudent && student.isIdVerified;
+    final label = !isStudent
+        ? 'Not required'
+        : verified
+        ? 'Verified'
+        : 'Pending';
+    final background = !isStudent
+        ? const Color(0xFFF1F5F9)
+        : verified
+        ? const Color(0xFFDCFCE7)
+        : const Color(0xFFFFF7E6);
+    final foreground = !isStudent
+        ? const Color(0xFF64748B)
+        : verified
+        ? const Color(0xFF047857)
+        : const Color(0xFFB45309);
+
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              verified
+                  ? Icons.verified_rounded
+                  : isStudent
+                  ? Icons.schedule_rounded
+                  : Icons.remove_circle_outline_rounded,
+              size: 13,
+              color: foreground,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: foreground,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

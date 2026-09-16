@@ -100,6 +100,28 @@ class AppDrawer extends StatelessWidget {
           ]
         : const <_DrawerDestination>[];
 
+    if (embedded) {
+      return _DesktopWorkspaceSidebar(
+        profileName: profileName,
+        role: role,
+        verified:
+            normalizedRole == 'student' &&
+            !(user?.requiresIdVerification ?? true),
+        currentRoute: currentRoute,
+        navigationItems: navigationItems,
+        instructorItems: instructorItems,
+        onSignOut: () async {
+          await context.read<AuthProvider>().signOut();
+          if (!context.mounted) return;
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            AppRoutes.startup,
+            (route) => false,
+          );
+        },
+      );
+    }
+
     final panel = Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -117,8 +139,10 @@ class AppDrawer extends StatelessWidget {
                 children: [
                   _DrawerHeader(
                     profileName: profileName,
-                    email: user?.email ?? 'guest@psu-educode.app',
                     role: role,
+                    verified:
+                        normalizedRole == 'student' &&
+                        !(user?.requiresIdVerification ?? true),
                     onTap: () => _openRoute(
                       context,
                       routeName: homeRoute,
@@ -169,11 +193,6 @@ class AppDrawer extends StatelessWidget {
                     isSelected: currentRoute == AppRoutes.account,
                     embedded: embedded,
                   ),
-                  const SizedBox(height: 8),
-                  _SidebarSupportCard(
-                    role: role,
-                    isInstructor: normalizedRole == 'instructor',
-                  ),
                 ],
               ),
             ),
@@ -198,7 +217,6 @@ class AppDrawer extends StatelessWidget {
         ),
       ),
     );
-    if (embedded) return panel;
     return Drawer(
       width: 320,
       elevation: 0,
@@ -276,17 +294,270 @@ class AppDrawer extends StatelessWidget {
   }
 }
 
+class _DesktopWorkspaceSidebar extends StatelessWidget {
+  const _DesktopWorkspaceSidebar({
+    required this.profileName,
+    required this.role,
+    required this.verified,
+    required this.currentRoute,
+    required this.navigationItems,
+    required this.instructorItems,
+    required this.onSignOut,
+  });
+
+  final String profileName;
+  final String role;
+  final bool verified;
+  final String? currentRoute;
+  final List<_DrawerDestination> navigationItems;
+  final List<_DrawerDestination> instructorItems;
+  final Future<void> Function() onSignOut;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF061633), Color(0xFF0A2A5B)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x26020B1A),
+            blurRadius: 24,
+            offset: Offset(8, 0),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                    child: Image.asset(AppDrawer._logoAsset),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'CoSci',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          '$role workspace',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: .5),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Divider(color: Colors.white.withValues(alpha: .1)),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 17,
+                    backgroundColor: const Color(0xFF1E4C91),
+                    child: Text(
+                      profileName.isEmpty ? 'U' : profileName[0].toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          profileName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          verified ? 'Verified student' : role,
+                          style: TextStyle(
+                            color: verified
+                                ? const Color(0xFF6EE7C7)
+                                : Colors.white.withValues(alpha: .55),
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                children: [
+                  ...navigationItems.map(
+                    (item) => _DesktopSidebarTile(
+                      item: item,
+                      selected: currentRoute == item.routeName,
+                    ),
+                  ),
+                  if (instructorItems.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 14, 12, 6),
+                      child: Text(
+                        'TEACHING TOOLS',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: .38),
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: .7,
+                        ),
+                      ),
+                    ),
+                    ...instructorItems.map(
+                      (item) => _DesktopSidebarTile(
+                        item: item,
+                        selected: currentRoute == item.routeName,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  _DesktopSidebarTile(
+                    item: const _DrawerDestination(
+                      title: 'Account & Security',
+                      routeName: AppRoutes.account,
+                      icon: Icons.manage_accounts_outlined,
+                    ),
+                    selected: currentRoute == AppRoutes.account,
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
+              child: TextButton.icon(
+                onPressed: onSignOut,
+                icon: const Icon(Icons.logout_rounded, size: 18),
+                label: const Text('Sign out'),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFFFCA5A5),
+                  minimumSize: const Size(double.infinity, 44),
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopSidebarTile extends StatelessWidget {
+  const _DesktopSidebarTile({required this.item, required this.selected});
+
+  final _DrawerDestination item;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 3),
+      child: Material(
+        color: selected ? const Color(0xFF174B99) : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: selected
+              ? null
+              : () => Navigator.pushReplacementNamed(context, item.routeName),
+          child: SizedBox(
+            height: 44,
+            child: Row(
+              children: [
+                const SizedBox(width: 12),
+                Icon(
+                  item.icon,
+                  size: 18,
+                  color: selected
+                      ? Colors.white
+                      : Colors.white.withValues(alpha: .68),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Text(
+                    item.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: selected
+                          ? Colors.white
+                          : Colors.white.withValues(alpha: .76),
+                      fontSize: 12.5,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _DrawerHeader extends StatelessWidget {
   const _DrawerHeader({
     required this.profileName,
-    required this.email,
     required this.role,
+    required this.verified,
     required this.onTap,
   });
 
   final String profileName;
-  final String email;
   final String role;
+  final bool verified;
   final VoidCallback onTap;
 
   @override
@@ -372,7 +643,7 @@ class _DrawerHeader extends StatelessWidget {
                               'CoSci',
                               style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 18,
+                                fontSize: 17,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: -0.2,
                               ),
@@ -382,7 +653,7 @@ class _DrawerHeader extends StatelessWidget {
                               'Capstone learning workspace',
                               style: TextStyle(
                                 color: Colors.white.withValues(alpha: 0.70),
-                                fontSize: 12,
+                                fontSize: 11.5,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -414,7 +685,7 @@ class _DrawerHeader extends StatelessWidget {
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
-                        fontSize: 12,
+                        fontSize: 11.5,
                       ),
                     ),
                   ),
@@ -423,19 +694,35 @@ class _DrawerHeader extends StatelessWidget {
                     profileName,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 19,
+                      fontSize: 17,
                       fontWeight: FontWeight.w700,
                       letterSpacing: -0.2,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    email,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.72),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
+                  const SizedBox(height: 7),
+                  Row(
+                    children: [
+                      Icon(
+                        verified
+                            ? Icons.verified_rounded
+                            : Icons.account_circle_outlined,
+                        size: 16,
+                        color: verified
+                            ? const Color(0xFF5EE6BE)
+                            : Colors.white.withValues(alpha: 0.68),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        verified ? 'Verified' : role,
+                        style: TextStyle(
+                          color: verified
+                              ? const Color(0xFF8AF0D2)
+                              : Colors.white.withValues(alpha: 0.72),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -566,73 +853,6 @@ class _DrawerItem extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _SidebarSupportCard extends StatelessWidget {
-  const _SidebarSupportCard({required this.role, required this.isInstructor});
-
-  final String role;
-  final bool isInstructor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        color: Colors.white.withValues(alpha: 0.06),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF57B5FF), Color(0xFF2DE2E6)],
-              ),
-            ),
-            child: Icon(
-              isInstructor
-                  ? Icons.record_voice_over_rounded
-                  : Icons.school_rounded,
-              color: Color(0xFF07204B),
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$role mode is active',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13.5,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  isInstructor
-                      ? 'Review learner attempts, provide feedback, and preview every activity.'
-                      : 'Keep your workspace focused and progress visible.',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.66),
-                    fontSize: 12,
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

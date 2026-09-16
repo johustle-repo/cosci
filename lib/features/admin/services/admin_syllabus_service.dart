@@ -9,7 +9,7 @@ import 'package:pseudocode_apk/features/admin/models/admin_syllabus_analysis.dar
 import 'package:pseudocode_apk/services/firestore_service.dart';
 
 /// Handles Cloudinary uploads and all Firestore CRUD for the
-/// syllabus upload + AI generation feature.
+/// syllabus upload and content-generation feature.
 class AdminSyllabusService {
   AdminSyllabusService({required FirestoreService firestoreService})
     : _db = firestoreService.instance;

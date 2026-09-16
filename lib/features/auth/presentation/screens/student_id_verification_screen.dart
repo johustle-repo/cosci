@@ -1,13 +1,20 @@
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:pseudocode_apk/app/routes/app_routes.dart';
 import 'package:pseudocode_apk/providers/auth_provider.dart';
+import 'package:pseudocode_apk/services/student_id_ocr_service.dart';
 import 'package:pseudocode_apk/services/student_id_verification_service.dart';
 
-enum _Stage { capture, review, approved, rejected }
+enum _Stage { capture, review, recheck, approved, rejected }
+
+// Drives the button label/progress indicator so "reading the photo"
+// (on-device OCR) and "verifying eligibility" (network call) read as two
+// distinct steps instead of one opaque spinner.
+enum _ScanPhase { idle, reading, verifying }
 
 const _eligiblePrograms = [
   'BS Information Technology',
@@ -25,6 +32,8 @@ class StudentIdVerificationScreen extends StatefulWidget {
 
 class _StudentIdVerificationScreenState
     extends State<StudentIdVerificationScreen> {
+  static const _psuInstitution = 'Pangasinan State University';
+
   final _studentNumber = TextEditingController();
   final _institution = TextEditingController();
   final _studentName = TextEditingController();
@@ -32,9 +41,13 @@ class _StudentIdVerificationScreenState
   final _picker = ImagePicker();
 
   Uint8List? _image;
+  String? _imagePath;
   String _mimeType = 'image/jpeg';
   String? _message;
+  String? _recheckReason;
+  int _recheckAttempts = 0;
   bool _busy = false;
+  _ScanPhase _phase = _ScanPhase.idle;
   _Stage _stage = _Stage.capture;
 
   @override
@@ -60,8 +73,21 @@ class _StudentIdVerificationScreenState
         setState(() => _message = 'Use an image smaller than 5 MB.');
         return;
       }
+      // Capture quality gate: a too-small photo won't have legible text no
+      // matter how good the OCR is, so catch it before wasting a scan.
+      final size = await _decodedSize(bytes);
+      if (!mounted) return;
+      if (size != null && (size.width < 600 || size.height < 350)) {
+        setState(
+          () => _message =
+              'This photo is too small to read. Move closer so the ID fills '
+              'the frame, then retake it.',
+        );
+        return;
+      }
       setState(() {
         _image = bytes;
+        _imagePath = file.path;
         _mimeType =
             file.mimeType ??
             (file.name.toLowerCase().endsWith('.png')
@@ -79,17 +105,25 @@ class _StudentIdVerificationScreenState
     }
   }
 
+  Future<ui.Size?> _decodedSize(Uint8List bytes) async {
+    try {
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final size = ui.Size(
+        frame.image.width.toDouble(),
+        frame.image.height.toDouble(),
+      );
+      frame.image.dispose();
+      return size;
+    } catch (_) {
+      // Let the format/size checks that already ran stand — a failure to
+      // decode here just means this quality gate is skipped, not fatal.
+      return null;
+    }
+  }
+
   // Step: Upload ID → OCR: Convert ID Image to Text → Extract ID Information.
   Future<void> _scan() async {
-    final number = _studentNumber.text.trim().toUpperCase();
-    if (number.isNotEmpty &&
-        !RegExp(r'^\d{2}\s*-?\s*[A-Z]{2}\s*-?\s*\d{4}$').hasMatch(number)) {
-      setState(
-        () => _message =
-            'Check the student number, or leave it blank so CoSci can read it from the ID.',
-      );
-      return;
-    }
     if (_image == null) {
       setState(
         () => _message =
@@ -99,34 +133,98 @@ class _StudentIdVerificationScreenState
     }
     setState(() {
       _busy = true;
+      _phase = _ScanPhase.reading;
       _message = null;
     });
     try {
+      // On Android/iOS, OCR runs on-device via ML Kit — no network round
+      // trip for this step. Other platforms (desktop/web, used for testing)
+      // have no ML Kit implementation, so they fall back to the server's
+      // OCR endpoint, which runs the same readability check.
+      if (StudentIdOcrService.isSupported && _imagePath != null) {
+        final ocr = await const StudentIdOcrService().recognize(
+          imagePath: _imagePath!,
+        );
+        if (!mounted) return;
+        _institution.text = _psuInstitution;
+        _studentName.text = ocr.fields.studentName;
+        _studentNumber.text = ocr.fields.studentNumber;
+        _program.text = ocr.fields.program;
+
+        // Decision: "ID Information Read Clearly?" — No.
+        final extractedFieldsAreComplete =
+            _studentName.text.trim().isNotEmpty &&
+            _studentNumber.text.trim().isNotEmpty &&
+            _program.text.trim().isNotEmpty;
+        if (!extractedFieldsAreComplete) {
+          setState(() {
+            _message =
+                'We could not clearly read the institution, name, student '
+                'number, and program from this ID. Review the extracted '
+                'information or scan the ID again.';
+            _recheckReason = 'unclear';
+            _recheckAttempts++;
+            _stage = _Stage.recheck;
+          });
+          return;
+        }
+
+        // Yes: continue straight into the name-match and program checks —
+        // no manual review step in between.
+        setState(() {
+          _message =
+              'ID information extracted. Confirm that the details are correct.';
+          _stage = _Stage.review;
+        });
+        return;
+      }
+
       final result = await const StudentIdVerificationService().scan(
         imageBytes: _image!,
         mimeType: _mimeType,
-        studentNumber: number,
       );
       if (!mounted) return;
-      // Decision: "ID Information Read Clearly?" — always land on the
-      // review step so the student can correct any OCR mistake before the
-      // authoritative check runs on confirm. A scan never marks the account
-      // verified by itself.
-      _institution.text = result.fields.institution;
+      _institution.text = _psuInstitution;
       _studentName.text = result.fields.studentName;
-      _studentNumber.text = result.fields.studentNumber.isNotEmpty
-          ? result.fields.studentNumber
-          : number;
+      _studentNumber.text = result.fields.studentNumber;
       _program.text = result.normalizedProgram ?? result.fields.program;
+
+      // Decision: "ID Information Read Clearly?" — No: stop and ask the
+      // student to review the extracted fields or scan the ID again, instead
+      // of guessing at a name/program match with incomplete data.
+      // Accept both the current `clear` response and the older `accepted`
+      // response whenever OCR actually supplied all required identity fields.
+      final extractedFieldsAreComplete =
+          _studentName.text.trim().isNotEmpty &&
+          _studentNumber.text.trim().isNotEmpty &&
+          _program.text.trim().isNotEmpty;
+      if (!extractedFieldsAreComplete) {
+        setState(() {
+          _message = result.message;
+          _recheckReason = result.reason ?? 'unclear';
+          _recheckAttempts++;
+          _stage = _Stage.recheck;
+        });
+        return;
+      }
+
+      // Yes: continue straight into the name-match and program checks with
+      // the values the server extracted — no manual review step in between.
       setState(() {
-        _message = result.message;
+        _message =
+            'ID information extracted. Confirm that the details are correct.';
         _stage = _Stage.review;
       });
     } catch (error) {
       if (!mounted) return;
       setState(() => _message = _cleanError(error));
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _phase = _ScanPhase.idle;
+        });
+      }
     }
   }
 
@@ -140,7 +238,13 @@ class _StudentIdVerificationScreenState
   // Steps: ID Name Matches Registered Account Name? → Navigate to Student ID
   // Verification Gate → Program Belongs to CCS? → Eligible Program? — all
   // evaluated server-side by the confirm action in one authoritative call.
-  Future<void> _confirm() async {
+  //
+  // [fromReview] is true only when the student pressed "Verify corrected
+  // information" from the editable review screen — a reviewRequired result
+  // then stays on that screen with inline guidance. Otherwise (called
+  // straight after a clear scan) a reviewRequired result is a fresh failure,
+  // so it goes to the recheck screen and asks to review or rescan.
+  Future<void> _confirm({bool fromReview = false}) async {
     if (_institution.text.trim().isEmpty ||
         _studentName.text.trim().isEmpty ||
         _studentNumber.text.trim().isEmpty ||
@@ -152,19 +256,16 @@ class _StudentIdVerificationScreenState
       return;
     }
     if (_image == null) {
-      setState(
-        () => _message = 'The ID photo is missing. Scan the ID again.',
-      );
+      setState(() => _message = 'The ID photo is missing. Scan the ID again.');
       return;
     }
     setState(() {
       _busy = true;
+      _phase = _ScanPhase.verifying;
       _message = null;
     });
     try {
       final result = await const StudentIdVerificationService().confirm(
-        imageBytes: _image!,
-        mimeType: _mimeType,
         fields: _fields,
       );
       if (!mounted) return;
@@ -174,10 +275,11 @@ class _StudentIdVerificationScreenState
         // Refresh so AuthProvider.currentUser reflects idVerificationStatus.
         await context.read<AuthProvider>().refreshSession();
         if (!mounted) return;
-        setState(() {
-          _message = result.message;
-          _stage = _Stage.approved;
-        });
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRoutes.startup,
+          (_) => false,
+        );
         return;
       }
 
@@ -190,17 +292,36 @@ class _StudentIdVerificationScreenState
         return;
       }
 
-      // reviewRequired: stay on the review step with the server's guidance
-      // (e.g. name mismatch, institution not confirmed, missing fields).
+      if (fromReview) {
+        // Already correcting fields by hand — keep guiding inline rather
+        // than bouncing back out to the recheck screen on every attempt.
+        setState(() {
+          _message = result.message;
+          _stage = _Stage.review;
+        });
+        return;
+      }
+
+      // Decision: "ID Name Matches Registered Account Name?" — No (or the
+      // program didn't match the account's registered program). Ask the
+      // student to review the extracted information or scan the ID again.
       setState(() {
+        _program.text = result.normalizedProgram ?? _program.text;
         _message = result.message;
-        _stage = _Stage.review;
+        _recheckReason = result.reason ?? 'unclear';
+        _recheckAttempts++;
+        _stage = _Stage.recheck;
       });
     } catch (error) {
       if (!mounted) return;
       setState(() => _message = _cleanError(error));
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _phase = _ScanPhase.idle;
+        });
+      }
     }
   }
 
@@ -208,7 +329,10 @@ class _StudentIdVerificationScreenState
     setState(() {
       _stage = _Stage.capture;
       _image = null;
+      _imagePath = null;
       _message = null;
+      _recheckReason = null;
+      _recheckAttempts = 0;
       _institution.clear();
       _studentName.clear();
       _studentNumber.clear();
@@ -230,6 +354,17 @@ class _StudentIdVerificationScreenState
 
   Future<void> _signOut() => context.read<AuthProvider>().signOut();
 
+  String _phaseLabel(String idleLabel) {
+    switch (_phase) {
+      case _ScanPhase.reading:
+        return 'Reading your ID…';
+      case _ScanPhase.verifying:
+        return 'Verifying eligibility…';
+      case _ScanPhase.idle:
+        return idleLabel;
+    }
+  }
+
   String _cleanError(Object error) {
     return error
         .toString()
@@ -241,72 +376,102 @@ class _StudentIdVerificationScreenState
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().currentUser;
-    final wide = MediaQuery.sizeOf(context).width >= 920;
+    final viewport = MediaQuery.sizeOf(context);
+    final wide = viewport.width >= 920;
+    final compact = viewport.width < 600;
     final card = _card(
       name: user?.displayName ?? 'Learner',
       program: user?.program ?? 'Program not set',
     );
     return Scaffold(
       backgroundColor: const Color(0xFFF3F7FD),
-      body: Stack(
-        children: [
-          const Positioned(
-            top: -130,
-            right: -90,
-            child: _Orb(size: 330, color: Color(0xFFDDE8FB)),
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFF8FAFF), Color(0xFFEEF5FC)],
           ),
-          const Positioned(
-            bottom: -150,
-            left: -100,
-            child: _Orb(size: 310, color: Color(0xFFDDF5F4)),
-          ),
-          SafeArea(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.symmetric(
-                horizontal: wide ? 40 : 16,
-                vertical: wide ? 32 : 16,
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (!compact) ...[
+              const Positioned(
+                top: -150,
+                right: -120,
+                child: _Orb(size: 300, color: Color(0xFFDDE8FB)),
               ),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1180),
-                  child: wide
-                      ? IntrinsicHeight(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Expanded(
-                                flex: 4,
-                                child: _OverviewPanel(
-                                  name: user?.displayName ?? 'Learner',
+              const Positioned(
+                bottom: -190,
+                left: -150,
+                child: _Orb(size: 300, color: Color(0xFFDDF5F4)),
+              ),
+            ],
+            SafeArea(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final verticalPadding = wide ? 32.0 : (compact ? 12.0 : 20.0);
+                  final minimumContentHeight =
+                      constraints.maxHeight > verticalPadding * 2
+                      ? constraints.maxHeight - verticalPadding * 2
+                      : 0.0;
+                  return SingleChildScrollView(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: wide ? 40 : (compact ? 12 : 20),
+                      vertical: verticalPadding,
+                    ),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: 1180,
+                          minHeight: minimumContentHeight,
+                        ),
+                        child: wide
+                            ? IntrinsicHeight(
+                                child: Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    Expanded(
+                                      flex: 4,
+                                      child: _OverviewPanel(
+                                        name: user?.displayName ?? 'Learner',
+                                      ),
+                                    ),
+                                    const SizedBox(width: 24),
+                                    Expanded(flex: 6, child: card),
+                                  ],
                                 ),
-                              ),
-                              const SizedBox(width: 24),
-                              Expanded(flex: 6, child: card),
-                            ],
-                          ),
-                        )
-                      : card,
-                ),
+                              )
+                            : card,
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _card({required String name, required String program}) {
+    final compact = MediaQuery.sizeOf(context).width < 600;
     return Container(
-      padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 420 ? 18 : 24),
+      padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 420 ? 16 : 24),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(compact ? 20 : 28),
         border: Border.all(color: const Color(0xFFD6E2F2)),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x140B2854),
-            blurRadius: 28,
-            offset: Offset(0, 12),
+            color: const Color(
+              0xFF0B2854,
+            ).withValues(alpha: compact ? 0.06 : 0.08),
+            blurRadius: compact ? 16 : 28,
+            offset: Offset(0, compact ? 6 : 12),
           ),
         ],
       ),
@@ -355,6 +520,34 @@ class _StudentIdVerificationScreenState
       );
     }
 
+    if (_stage == _Stage.recheck) {
+      final mismatch = _recheckReason == 'nameMismatch';
+      final notOnMasterlist = _recheckReason == 'notOnMasterlist';
+      return _Recheck(
+        key: const ValueKey('recheck'),
+        mismatch: mismatch,
+        icon: notOnMasterlist ? Icons.fact_check_outlined : null,
+        title: mismatch
+            ? 'ID name does not match the registered account'
+            : notOnMasterlist
+            ? 'Student number not found on the CCS masterlist'
+            : "We couldn't read your ID clearly",
+        message:
+            _message ??
+            (mismatch
+                ? 'The name on the ID does not clearly match your registered account.'
+                : notOnMasterlist
+                ? 'This student number was not found in the CCS roster.'
+                : 'Some fields could not be read from the photo.'),
+        // After a couple of failed attempts, the student is probably not
+        // going to fix it by guessing again — surface concrete capture tips
+        // and a way out instead of repeating the same two buttons silently.
+        showTips: _recheckAttempts >= 2 && !notOnMasterlist,
+        onReview: () => setState(() => _stage = _Stage.review),
+        onRescan: _reset,
+      );
+    }
+
     if (_stage == _Stage.review) {
       return Column(
         key: const ValueKey('review'),
@@ -371,7 +564,12 @@ class _StudentIdVerificationScreenState
             _ImageArea(image: _image, busy: _busy, onTap: () {}),
             const SizedBox(height: 14),
           ],
-          _field(_institution, 'Institution', Icons.account_balance_outlined),
+          _field(
+            _institution,
+            'Institution',
+            Icons.account_balance_outlined,
+            readOnly: true,
+          ),
           _field(_studentName, 'Student Name', Icons.person_outline),
           _field(_studentNumber, 'Student Number', Icons.numbers_rounded),
           _field(_program, 'Program', Icons.school_outlined),
@@ -380,7 +578,7 @@ class _StudentIdVerificationScreenState
           SizedBox(
             height: 50,
             child: FilledButton.icon(
-              onPressed: _busy ? null : _confirm,
+              onPressed: _busy ? null : () => _confirm(fromReview: true),
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF1746A2),
                 shape: RoundedRectangleBorder(
@@ -396,7 +594,7 @@ class _StudentIdVerificationScreenState
                       ),
                     )
                   : const Icon(Icons.verified_user_outlined),
-              label: Text(_busy ? 'Verifying…' : 'Verify corrected information'),
+              label: Text(_phaseLabel('Confirm information')),
             ),
           ),
           TextButton(
@@ -421,29 +619,7 @@ class _StudentIdVerificationScreenState
         _LearnerSummary(name: name, program: program),
         const SizedBox(height: 18),
         const Text(
-          '1. Student number (optional)',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 9),
-        TextField(
-          controller: _studentNumber,
-          enabled: !_busy,
-          textCapitalization: TextCapitalization.characters,
-          decoration: InputDecoration(
-            hintText: 'We can read this from your ID',
-            prefixIcon: const Icon(Icons.numbers_rounded),
-            filled: true,
-            fillColor: const Color(0xFFF8FAFD),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: Color(0xFFD6E2F2)),
-            ),
-          ),
-        ),
-        const SizedBox(height: 18),
-        const Text(
-          '2. Add a clear photo of your ID',
+          'Add a clear photo of your ID',
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 5),
@@ -452,7 +628,11 @@ class _StudentIdVerificationScreenState
           style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
         ),
         const SizedBox(height: 10),
-        _ImageArea(image: _image, busy: _busy, onTap: () => _pick(ImageSource.gallery)),
+        _ImageArea(
+          image: _image,
+          busy: _busy,
+          onTap: () => _pick(ImageSource.gallery),
+        ),
         const SizedBox(height: 12),
         _PickerButtons(
           busy: _busy,
@@ -480,9 +660,13 @@ class _StudentIdVerificationScreenState
                     ),
                   )
                 : const Icon(Icons.document_scanner_outlined),
-            label: Text(_busy ? 'Reading your ID…' : 'Read my ID'),
+            label: Text(_phaseLabel('Read my ID')),
           ),
         ),
+        if (_busy) ...[
+          const SizedBox(height: 12),
+          _ScanProgress(phase: _phase),
+        ],
         const SizedBox(height: 11),
         const Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -506,12 +690,18 @@ class _StudentIdVerificationScreenState
     );
   }
 
-  Widget _field(TextEditingController controller, String label, IconData icon) {
+  Widget _field(
+    TextEditingController controller,
+    String label,
+    IconData icon, {
+    bool readOnly = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextField(
         controller: controller,
         enabled: !_busy,
+        readOnly: readOnly,
         decoration: InputDecoration(
           labelText: label,
           prefixIcon: Icon(icon),
@@ -597,6 +787,126 @@ class _Outcome extends StatelessWidget {
   }
 }
 
+// Flowchart nodes: "Show: ID name does not match the registered account" and
+// "Ask Student to Review Information or Scan the ID Again" — both offer the
+// same two ways forward, so they share this one screen.
+class _Recheck extends StatelessWidget {
+  const _Recheck({
+    super.key,
+    required this.mismatch,
+    required this.title,
+    required this.message,
+    required this.onReview,
+    required this.onRescan,
+    this.showTips = false,
+    this.icon,
+  });
+
+  final bool mismatch;
+  final String title;
+  final String message;
+  final VoidCallback onReview;
+  final VoidCallback onRescan;
+  final bool showTips;
+  final IconData? icon;
+
+  static const _tips = [
+    'Lay the ID flat on a plain, well-lit surface — avoid glare from lights or windows.',
+    'Fill the frame with the ID and keep all four corners visible.',
+    'Hold the camera steady and let it focus before capturing.',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final color = mismatch ? const Color(0xFFBE123C) : const Color(0xFFB8790A);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Icon(
+          icon ??
+              (mismatch ? Icons.badge_outlined : Icons.image_search_rounded),
+          size: 44,
+          color: color,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          message,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Color(0xFF60728E), height: 1.4),
+        ),
+        if (showTips) ...[
+          const SizedBox(height: 18),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F6FF),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFD9E7FB)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(
+                      Icons.tips_and_updates_outlined,
+                      size: 18,
+                      color: Color(0xFF1746A2),
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'For a cleaner scan',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ..._tips.map(
+                  (tip) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      '•  $tip',
+                      style: const TextStyle(
+                        color: Color(0xFF3A4A63),
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 22),
+        SizedBox(
+          height: 50,
+          child: FilledButton.icon(
+            onPressed: onReview,
+            icon: const Icon(Icons.edit_note_rounded),
+            label: const Text('Review information'),
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 50,
+          child: OutlinedButton.icon(
+            onPressed: onRescan,
+            icon: const Icon(Icons.replay_rounded),
+            label: const Text('Scan the ID again'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _Heading extends StatelessWidget {
   const _Heading({required this.title, required this.subtitle});
 
@@ -627,7 +937,10 @@ class _Heading extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
               const SizedBox(height: 3),
               Text(
@@ -671,7 +984,10 @@ class _LearnerSummary extends StatelessWidget {
                 Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
                 Text(
                   program,
-                  style: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
+                  style: const TextStyle(
+                    color: Color(0xFF64748B),
+                    fontSize: 13,
+                  ),
                 ),
               ],
             ),
@@ -684,19 +1000,27 @@ class _LearnerSummary extends StatelessWidget {
 }
 
 class _ImageArea extends StatelessWidget {
-  const _ImageArea({required this.image, required this.busy, required this.onTap});
+  const _ImageArea({
+    required this.image,
+    required this.busy,
+    required this.onTap,
+  });
   final Uint8List? image;
   final bool busy;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 600;
+    final previewHeight = image == null
+        ? (compact ? 190.0 : 230.0)
+        : (compact ? 240.0 : 300.0);
     return InkWell(
       onTap: busy ? null : onTap,
       borderRadius: BorderRadius.circular(16),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
-        height: image == null ? 150 : 200,
+        height: previewHeight,
         decoration: BoxDecoration(
           color: const Color(0xFFF8FAFD),
           borderRadius: BorderRadius.circular(16),
@@ -708,23 +1032,34 @@ class _ImageArea extends StatelessWidget {
           ),
         ),
         child: image == null
-            ? const Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+            ? Stack(
+                fit: StackFit.expand,
                 children: [
-                  Icon(
-                    Icons.add_photo_alternate_outlined,
-                    size: 38,
-                    color: Color(0xFF1746A2),
+                  const Positioned.fill(
+                    child: _ScannerFrame(color: Color(0xFF9DB6DE)),
                   ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Tap to select your PSU ID',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'JPG or PNG • maximum 5 MB',
-                    style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                  const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.add_photo_alternate_outlined,
+                        size: 38,
+                        color: Color(0xFF1746A2),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Tap to select your PSU ID',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Align all four corners inside the frame',
+                        style: TextStyle(
+                          color: Color(0xFF64748B),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               )
@@ -734,6 +1069,9 @@ class _ImageArea extends StatelessWidget {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(14),
                     child: Image.memory(image!, fit: BoxFit.contain),
+                  ),
+                  const Positioned.fill(
+                    child: _ScannerFrame(color: Color(0xFF31A98B)),
                   ),
                   Positioned(
                     top: 10,
@@ -771,6 +1109,58 @@ class _ImageArea extends StatelessWidget {
   }
 }
 
+// Viewfinder-style corner brackets over the ID preview, guiding framing the
+// way a scanner app would — purely a visual guide, since image_picker hands
+// off to the native camera/gallery UI rather than a live preview we control.
+class _ScannerFrame extends StatelessWidget {
+  const _ScannerFrame({required this.color});
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: CustomPaint(painter: _CornerFramePainter(color: color)),
+    );
+  }
+}
+
+class _CornerFramePainter extends CustomPainter {
+  const _CornerFramePainter({required this.color});
+  final Color color;
+
+  static const _inset = 14.0;
+  static const _arm = 22.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    final rect = Rect.fromLTWH(
+      _inset,
+      _inset,
+      size.width - _inset * 2,
+      size.height - _inset * 2,
+    );
+
+    void corner(Offset origin, Offset arm1, Offset arm2) {
+      canvas.drawLine(origin, origin + arm1, paint);
+      canvas.drawLine(origin, origin + arm2, paint);
+    }
+
+    corner(rect.topLeft, const Offset(_arm, 0), const Offset(0, _arm));
+    corner(rect.topRight, const Offset(-_arm, 0), const Offset(0, _arm));
+    corner(rect.bottomLeft, const Offset(_arm, 0), const Offset(0, -_arm));
+    corner(rect.bottomRight, const Offset(-_arm, 0), const Offset(0, -_arm));
+  }
+
+  @override
+  bool shouldRepaint(covariant _CornerFramePainter oldDelegate) =>
+      oldDelegate.color != color;
+}
+
 class _PickerButtons extends StatelessWidget {
   const _PickerButtons({
     required this.busy,
@@ -783,32 +1173,103 @@ class _PickerButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final camera = OutlinedButton.icon(
-          onPressed: busy ? null : onCamera,
-          icon: const Icon(Icons.camera_alt_outlined),
-          label: const Text('Take a photo'),
-        );
-        final gallery = OutlinedButton.icon(
-          onPressed: busy ? null : onGallery,
-          icon: const Icon(Icons.photo_library_outlined),
-          label: const Text('Upload from gallery'),
-        );
-        if (constraints.maxWidth < 470) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [camera, const SizedBox(height: 8), gallery],
-          );
-        }
-        return Row(
-          children: [
-            Expanded(child: camera),
-            const SizedBox(width: 10),
-            Expanded(child: gallery),
-          ],
-        );
-      },
+    // A LayoutBuilder here would throw once this row sits under the wide
+    // layout's IntrinsicHeight (it can't report intrinsic dimensions), so
+    // the breakpoint uses the window width instead of the local constraints.
+    final camera = OutlinedButton.icon(
+      onPressed: busy ? null : onCamera,
+      icon: const Icon(Icons.camera_alt_outlined),
+      label: const Text('Take a photo'),
+    );
+    final gallery = OutlinedButton.icon(
+      onPressed: busy ? null : onGallery,
+      icon: const Icon(Icons.photo_library_outlined),
+      label: const Text('Upload from gallery'),
+    );
+    if (MediaQuery.sizeOf(context).width < 500) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [camera, const SizedBox(height: 8), gallery],
+      );
+    }
+    return Row(
+      children: [
+        Expanded(child: camera),
+        const SizedBox(width: 10),
+        Expanded(child: gallery),
+      ],
+    );
+  }
+}
+
+// Shows which half of the pipeline is running — on-device OCR, then the
+// network eligibility check — instead of one opaque spinner for both.
+class _ScanProgress extends StatelessWidget {
+  const _ScanProgress({required this.phase});
+  final _ScanPhase phase;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _ScanProgressStep(
+            label: 'Reading ID',
+            active: phase == _ScanPhase.reading,
+            done: phase == _ScanPhase.verifying,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _ScanProgressStep(
+            label: 'Checking eligibility',
+            active: phase == _ScanPhase.verifying,
+            done: false,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ScanProgressStep extends StatelessWidget {
+  const _ScanProgressStep({
+    required this.label,
+    required this.active,
+    required this.done,
+  });
+  final String label;
+  final bool active;
+  final bool done;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = active || done
+        ? const Color(0xFF1746A2)
+        : const Color(0xFFC3D2E8);
+    return Column(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: LinearProgressIndicator(
+            minHeight: 5,
+            value: done ? 1 : (active ? null : 0),
+            backgroundColor: const Color(0xFFE4ECF9),
+            valueColor: AlwaysStoppedAnimation(color),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: active || done
+                ? const Color(0xFF1746A2)
+                : const Color(0xFF8FA1BE),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -838,7 +1299,9 @@ class _Feedback extends StatelessWidget {
               color: color,
             ),
             const SizedBox(width: 9),
-            Expanded(child: Text(message, style: TextStyle(color: color))),
+            Expanded(
+              child: Text(message, style: TextStyle(color: color)),
+            ),
           ],
         ),
       ),
@@ -945,7 +1408,10 @@ class _OverviewItem extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -972,7 +1438,11 @@ class _ProgressSteps extends StatelessWidget {
 }
 
 class _Step extends StatelessWidget {
-  const _Step({required this.label, required this.number, required this.complete});
+  const _Step({
+    required this.label,
+    required this.number,
+    required this.complete,
+  });
   final String label;
   final String number;
   final bool complete;
@@ -998,7 +1468,10 @@ class _Step extends StatelessWidget {
                 ),
         ),
         const SizedBox(height: 5),
-        Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+        ),
       ],
     );
   }

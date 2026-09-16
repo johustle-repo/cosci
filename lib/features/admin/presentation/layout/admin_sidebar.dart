@@ -75,17 +75,6 @@ const _navItems = [
     icon: Icons.history_rounded,
     route: AppRoutes.adminActivityLogs,
   ),
-  // AI Section
-  _NavItem(
-    label: 'Syllabi & AI',
-    icon: Icons.auto_awesome_rounded,
-    route: AppRoutes.adminSyllabus,
-  ),
-  _NavItem(
-    label: 'Gen Jobs',
-    icon: Icons.batch_prediction_rounded,
-    route: AppRoutes.adminGenerationJobs,
-  ),
 ];
 
 class AdminSidebar extends StatelessWidget {
@@ -182,35 +171,10 @@ class AdminSidebar extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               children: [
                 ..._navItems.map((item) {
-                  // Insert a section divider before the AI items
-                  final isAiSectionStart =
-                      item.route == AppRoutes.adminSyllabus;
                   final isActive = currentRoute == item.route;
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (isAiSectionStart) ...[
-                        const SizedBox(height: 8),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Divider(
-                            color: Colors.white.withValues(alpha: 0.1),
-                            height: 1,
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
-                          child: Text(
-                            'AI Content',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.35),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                        ),
-                      ],
                       _SidebarTile(
                         item: item,
                         isActive: isActive,

@@ -65,7 +65,7 @@ class _AdminGenerationJobsScreenState extends State<AdminGenerationJobsScreen> {
                       ),
                     ),
                     Text(
-                      'Track AI content generation runs and their results.',
+                      'Track content generation runs and their results.',
                       style: TextStyle(fontSize: 13, color: Colors.black54),
                     ),
                   ],

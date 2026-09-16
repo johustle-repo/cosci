@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pseudocode_apk/models/app_user.dart';
+import 'package:pseudocode_apk/services/institutional_email_service.dart';
 import 'package:pseudocode_apk/services/firestore_service.dart';
 
 class AuthService {
@@ -85,6 +86,13 @@ class AuthService {
     required String program,
     required String yearLevel,
   }) async {
+    final normalizedEmail = InstitutionalEmailService.normalize(email);
+    if (!InstitutionalEmailService.isValid(normalizedEmail)) {
+      throw FirebaseAuthException(
+        code: 'non-institutional-email',
+        message: InstitutionalEmailService.warningMessage,
+      );
+    }
     _registrationInProgress = true;
     _lastVerificationEmailSent = false;
     _lastVerificationEmailError = null;
@@ -92,13 +100,13 @@ class AuthService {
       UserCredential credential;
       try {
         credential = await _firebaseAuth.createUserWithEmailAndPassword(
-          email: email,
+          email: normalizedEmail,
           password: password,
         );
       } on FirebaseAuthException catch (error) {
         if (error.code != 'email-already-in-use') rethrow;
         return _resumeUnverifiedRegistration(
-          email: email,
+          email: normalizedEmail,
           password: password,
           displayName: displayName,
           program: program,

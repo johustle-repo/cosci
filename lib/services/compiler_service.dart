@@ -79,14 +79,9 @@ class CompilerService {
   static String get _resolvedDefaultEndpoint {
     if (_endpoint.trim().isNotEmpty) return _endpoint.trim();
 
-    // Local Flutter web development defaults to the hosted CoSci compiler so
-    // `flutter run -d chrome` works without a separately started local
-    // service. Pass --dart-define=COMPILER_API_URL=http://localhost:8787/... to
-    // exercise a locally running compiler_server instead.
-    final host = Uri.base.host.toLowerCase();
-    final isLocal = host.isEmpty || host == 'localhost' || host == '127.0.0.1';
-    if (isLocal) return 'https://cosci-compiler.onrender.com/api/v2/execute';
-    return '';
+    // Render remains the shared compiler host for installed apps, local web,
+    // and Firebase Hosting. A dart-define can still override it for testing.
+    return 'https://cosci-compiler.onrender.com/api/v2/execute';
   }
 
   static bool get isConfigured => _resolvedDefaultEndpoint.isNotEmpty;
@@ -143,6 +138,12 @@ class CompilerService {
           message: 'Source code exceeds the 50 KB learning-workspace limit.',
         );
       }
+      // Text entered in a terminal is submitted by pressing Enter. Mirror that
+      // behavior for the remote compiler so Scanner.nextInt() followed by
+      // Scanner.nextLine() can consume the terminating line break correctly.
+      final normalizedStdin = stdin.isEmpty || stdin.endsWith('\n')
+          ? stdin
+          : '$stdin\n';
       final response = await client
           .post(
             Uri.parse(endpoint),
@@ -156,12 +157,12 @@ class CompilerService {
                   'content': sourceCode,
                 },
               ],
-              'compile_timeout': 10000,
-              'run_timeout': 5000,
-              'stdin': stdin,
+              'compile_timeout': 15000,
+              'run_timeout': 6000,
+              'stdin': normalizedStdin,
             }),
           )
-          .timeout(const Duration(seconds: 20));
+          .timeout(const Duration(seconds: 35));
       if (response.statusCode < 200 || response.statusCode >= 300) {
         return ExecutionResult(
           status: ExecutionStatus.serviceError,
@@ -212,6 +213,15 @@ class CompilerService {
             message: 'The program ran for too long and was stopped safely.',
           );
         }
+        if (_isMissingStandardInput(runtimeText)) {
+          return ExecutionResult(
+            status: ExecutionStatus.runtimeError,
+            output: '',
+            message: stdin.trim().isEmpty
+                ? 'Input required. Add one line in Standard input for every Scanner read, then validate again.'
+                : 'Not enough standard input. Add one line for every Scanner read, in the same order, then validate again.',
+          );
+        }
         final location = _diagnosticLocation(runtimeText);
         return ExecutionResult(
           status: ExecutionStatus.runtimeError,
@@ -239,6 +249,12 @@ class CompilerService {
       if (_client == null) client.close();
     }
   }
+}
+
+bool _isMissingStandardInput(String diagnostic) {
+  final text = diagnostic.toLowerCase();
+  return text.contains('nosuchelementexception') &&
+      (text.contains('scanner.next') || text.contains('java.util.scanner'));
 }
 
 bool _isTimeout(int exitCode, String diagnostic) {

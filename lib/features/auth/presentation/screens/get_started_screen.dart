@@ -364,7 +364,6 @@ class GetStartedScreen extends StatelessWidget {
                         children: [
                           _MetricPill(value: '3', label: 'learning modes'),
                           _MetricPill(value: '24/7', label: 'progress sync'),
-                          // _MetricPill(value: 'AI', label: 'content assist'),
                         ],
                       ),
                     ],

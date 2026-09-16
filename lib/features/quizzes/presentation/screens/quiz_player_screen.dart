@@ -152,10 +152,7 @@ class _QuizPlayerScreenState extends State<QuizPlayerScreen> {
     final message = gamification.errorMessage ?? gamification.statusMessage;
     if (message != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(seconds: 3),
-        ),
+        SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
       );
     }
   }

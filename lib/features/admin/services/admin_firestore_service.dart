@@ -5,6 +5,7 @@ import 'package:pseudocode_apk/features/admin/models/admin_badge.dart';
 import 'package:pseudocode_apk/features/admin/models/admin_daily_challenge.dart';
 import 'package:pseudocode_apk/features/admin/models/admin_gamification_rule.dart';
 import 'package:pseudocode_apk/features/admin/models/admin_lesson.dart';
+import 'package:pseudocode_apk/features/admin/models/admin_masterlist_entry.dart';
 import 'package:pseudocode_apk/features/admin/models/admin_puzzle.dart';
 import 'package:pseudocode_apk/features/admin/models/admin_quiz.dart';
 import 'package:pseudocode_apk/features/admin/models/admin_settings.dart';
@@ -547,6 +548,40 @@ class AdminFirestoreService {
   }
 
   Future<void> deletePuzzle(String id) => _fs.puzzleDocument(id).delete();
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // CCS STUDENT MASTERLIST
+  // ══════════════════════════════════════════════════════════════════════════
+  // The roster the ID-verification pipeline checks a scanned student number
+  // against (see compiler_server/server.mjs's confirm action). Each document
+  // id is the canonical student number itself.
+
+  Future<List<AdminMasterlistEntry>> fetchMasterlistEntries() async {
+    final snap = await _fs
+        .ccsMasterlistCollection()
+        .orderBy(FieldPath.documentId)
+        .get();
+    return snap.docs
+        .map((d) => AdminMasterlistEntry.fromMap(d.id, d.data()))
+        .toList();
+  }
+
+  Future<void> createMasterlistEntry(AdminMasterlistEntry entry) async {
+    await _fs.ccsMasterlistDocument(entry.studentNumber).set({
+      ...entry.toMap(),
+      ..._timestamps(isNew: true),
+    });
+  }
+
+  Future<void> updateMasterlistEntry(AdminMasterlistEntry entry) async {
+    await _fs.ccsMasterlistDocument(entry.studentNumber).update({
+      ...entry.toMap(),
+      ..._timestamps(isNew: false),
+    });
+  }
+
+  Future<void> deleteMasterlistEntry(String studentNumber) =>
+      _fs.ccsMasterlistDocument(studentNumber).delete();
 
   Future<void> togglePuzzlePublished(String id, bool isPublished) {
     return _fs.puzzleDocument(id).update({

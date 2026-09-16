@@ -157,7 +157,7 @@ class AppScaffold extends StatelessWidget {
       body: useDesktopNavigation
           ? Row(
               children: [
-                const SizedBox(width: 264, child: AppDrawer(embedded: true)),
+                const SizedBox(width: 236, child: AppDrawer(embedded: true)),
                 Expanded(
                   child: Column(
                     children: [
@@ -166,7 +166,12 @@ class AppScaffold extends StatelessWidget {
                         subtitle: workspaceLabel,
                         actions: actions,
                       ),
-                      Expanded(child: page),
+                      Expanded(
+                        child: Theme(
+                          data: _desktopWorkspaceTheme(context),
+                          child: page,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -175,6 +180,42 @@ class AppScaffold extends StatelessWidget {
           : page,
       floatingActionButton: floatingActionButton,
       bottomNavigationBar: bottomNavigationBar,
+    );
+  }
+
+  ThemeData _desktopWorkspaceTheme(BuildContext context) {
+    final base = Theme.of(context);
+    const border = Color(0xFFD8E3F2);
+    return base.copyWith(
+      cardTheme: CardThemeData(
+        color: Colors.white,
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: const BorderSide(color: border),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(0, 44),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(0, 44),
+          side: const BorderSide(color: border),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
     );
   }
 }
@@ -192,27 +233,23 @@ class _DesktopPageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<AuthProvider>().currentUser;
     return Container(
-      height: 78,
-      padding: const EdgeInsets.symmetric(horizontal: 28),
+      height: 66,
+      padding: const EdgeInsets.symmetric(horizontal: 18),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.96),
+        color: const Color(0xF7FFFFFF),
         border: const Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D0F2A55),
+            blurRadius: 16,
+            offset: Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFD6E2F2)),
-            ),
-            child: Image.asset('assets/images/cosci.png'),
-          ),
-          const SizedBox(width: 13),
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -224,7 +261,7 @@ class _DesktopPageHeader extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Color(0xFF0F172A),
-                    fontSize: 18,
+                    fontSize: 19,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -240,6 +277,33 @@ class _DesktopPageHeader extends StatelessWidget {
             ),
           ),
           if (actions != null) ...actions!,
+          if (actions != null && actions!.isNotEmpty) const SizedBox(width: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF4F7FC),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFD6E2F2)),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.account_circle_outlined,
+                  size: 17,
+                  color: Color(0xFF0E3A8A),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  user?.displayName ?? 'CoSci user',
+                  style: const TextStyle(
+                    color: Color(0xFF0E3A8A),
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

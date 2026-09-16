@@ -1,8 +1,28 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pseudocode_apk/features/auth/presentation/utils/auth_validators.dart';
+import 'package:pseudocode_apk/services/institutional_email_service.dart';
 import 'package:pseudocode_apk/models/app_user.dart';
 
 void main() {
+  test('accepts only PSU institutional email addresses for registration', () {
+    expect(
+      AuthValidators.validateInstitutionalEmail('student@psu.edu.ph'),
+      isNull,
+    );
+    expect(
+      AuthValidators.validateInstitutionalEmail('STUDENT@PSU.EDU.PH'),
+      isNull,
+    );
+    expect(
+      AuthValidators.validateInstitutionalEmail('student@gmail.com'),
+      InstitutionalEmailService.warningMessage,
+    );
+    expect(
+      AuthValidators.validateInstitutionalEmail('student@mail.psu.edu.ph'),
+      InstitutionalEmailService.warningMessage,
+    );
+  });
+
   test('legacy professor accounts normalize to instructor', () {
     const user = AppUser(
       uid: '1',

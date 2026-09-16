@@ -385,7 +385,8 @@ class BadgeCollectionCard extends StatelessWidget {
                                           badge: badge,
                                           learnerName: learnerName,
                                           learnerId: user?.uid ?? 'learner',
-                                        );
+                                        )
+                                        .timeout(const Duration(seconds: 20));
                                     if (context.mounted) {
                                       ScaffoldMessenger.of(
                                         context,

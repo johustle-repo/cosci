@@ -147,7 +147,7 @@ $cleanedText
     if (decoded is Map<String, dynamic>) return decoded;
 
     throw Exception(
-      'Expected a JSON object from AI, got ${decoded.runtimeType}',
+      'Expected a JSON object from the content service, got ${decoded.runtimeType}',
     );
   }
 
@@ -172,7 +172,7 @@ $cleanedText
     }
 
     throw Exception(
-      'Expected a JSON array from AI, got ${decoded.runtimeType}',
+      'Expected a JSON array from the content service, got ${decoded.runtimeType}',
     );
   }
 
@@ -299,7 +299,7 @@ $cleanedText
     if (!hasApiKey) {
       throw Exception(
         'Groq API key is not configured. '
-        'Go to Settings → AI Configuration to enter your key.',
+        'Go to Settings → Content Configuration to enter your key.',
       );
     }
   }

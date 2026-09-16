@@ -64,6 +64,7 @@ class StudentIdVerificationResult {
     required this.message,
     this.fields = const StudentIdFields(),
     this.normalizedProgram,
+    this.reason,
   });
 
   final String status;
@@ -71,9 +72,21 @@ class StudentIdVerificationResult {
   final StudentIdFields fields;
   final String? normalizedProgram;
 
+  /// Why a `reviewRequired` result was returned: `unclear` (missing/unreadable
+  /// fields), `nameMismatch` (ID name vs. registered account), or
+  /// `accountMismatch` (ID program vs. the program already on the account).
+  final String? reason;
+
   bool get approved => status == 'approved';
   bool get rejected => status == 'rejected';
   bool get reviewRequired => status == 'reviewRequired';
+
+  /// Decision: "ID Information Read Clearly?" — true only for a `scan` whose
+  /// fields were all extracted, meaning the flow can go straight into the
+  /// name-match and program checks without a manual review step.
+  bool get readClearly => status == 'clear';
+
+  bool get nameMismatch => reason == 'nameMismatch';
 }
 
 class StudentIdVerificationService {
@@ -123,6 +136,7 @@ class StudentIdVerificationService {
           'Please review the extracted information.',
       fields: StudentIdFields.fromMap(data['fields'] as Map<String, dynamic>?),
       normalizedProgram: data['normalizedProgram'] as String?,
+      reason: data['reason'] as String?,
     );
   }
 
@@ -149,12 +163,9 @@ class StudentIdVerificationService {
     return _parseResponse(response);
   }
 
-  /// Submits the (possibly student-corrected) fields for final validation.
-  /// The server currently re-validates against the original photo, so it
-  /// must be resent alongside the corrected fields.
+  /// Submits the student-reviewed fields for final masterlist validation.
+  /// OCR is intentionally not run again during confirmation.
   Future<StudentIdVerificationResult> confirm({
-    required Uint8List imageBytes,
-    required String mimeType,
     required StudentIdFields fields,
   }) async {
     final headers = await _authHeaders();
@@ -162,12 +173,7 @@ class StudentIdVerificationService {
         .post(
           _endpoint,
           headers: headers,
-          body: jsonEncode({
-            'action': 'confirm',
-            'imageBase64': base64Encode(imageBytes),
-            'mimeType': mimeType,
-            'fields': fields.toMap(),
-          }),
+          body: jsonEncode({'action': 'confirm', 'fields': fields.toMap()}),
         )
         .timeout(const Duration(seconds: 60));
     return _parseResponse(response);

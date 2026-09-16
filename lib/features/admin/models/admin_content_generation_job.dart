@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// Tracks a single AI content-generation request for a syllabus.
+/// Tracks a single content-generation request for a syllabus.
 class AdminContentGenerationJob {
   const AdminContentGenerationJob({
     required this.id,

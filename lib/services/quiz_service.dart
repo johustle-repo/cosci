@@ -58,9 +58,7 @@ class QuizService {
     }
     final host = Uri.base.host.toLowerCase();
     final isLocal = host.isEmpty || host == 'localhost' || host == '127.0.0.1';
-    return isLocal
-        ? 'https://cosci-compiler.onrender.com/quiz/evaluate'
-        : '';
+    return isLocal ? 'https://cosci-compiler.onrender.com/quiz/evaluate' : '';
   }
 
   Future<List<Quiz>> fetchQuizzes() async {

@@ -1,3 +1,5 @@
+import 'package:pseudocode_apk/services/institutional_email_service.dart';
+
 class AuthValidators {
   static String? validateEmail(String? value) {
     final email = value?.trim() ?? '';
@@ -11,6 +13,15 @@ class AuthValidators {
       return 'Enter a valid email address.';
     }
 
+    return null;
+  }
+
+  static String? validateInstitutionalEmail(String? value) {
+    final formatError = validateEmail(value);
+    if (formatError != null) return formatError;
+    if (!InstitutionalEmailService.isValid(value!)) {
+      return InstitutionalEmailService.warningMessage;
+    }
     return null;
   }
 

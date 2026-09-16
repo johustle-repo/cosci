@@ -187,7 +187,7 @@ class _PageHeader extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            'Upload syllabi and generate AI-powered course content',
+                            'Upload syllabi and generate course content',
                             style: TextStyle(fontSize: 13, color: _textSub),
                           ),
                         ],
@@ -764,7 +764,7 @@ class _EmptyState extends StatelessWidget {
             Text(
               hasQuery
                   ? 'Try a different search term.'
-                  : 'Upload your first syllabus to start generating\nAI-powered course content.',
+                  : 'Upload your first syllabus to start generating\ncourse content.',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 13, color: _textSub),
             ),

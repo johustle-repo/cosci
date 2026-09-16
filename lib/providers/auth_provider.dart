@@ -221,7 +221,8 @@ class AuthProvider extends ChangeNotifier {
     } on FirebaseAuthException catch (error) {
       final normalizedEmail = email.trim().toLowerCase();
       final persistedPendingEmail = _authService!.pendingVerificationEmail;
-      if (persistedPendingEmail == normalizedEmail) {
+      if (error.code != 'non-institutional-email' &&
+          persistedPendingEmail == normalizedEmail) {
         // Firebase may emit email-already-in-use or temporarily throttle a
         // retry after the account was already created. The persisted,
         // unverified Firebase session is authoritative: keep the learner on
@@ -500,6 +501,8 @@ class AuthProvider extends ChangeNotifier {
     switch (error.code) {
       case 'invalid-email':
         return 'Enter a valid email address.';
+      case 'non-institutional-email':
+        return 'Use your PSU institutional email address ending in @psu.edu.ph.';
       case 'user-disabled':
         return 'This account has been disabled.';
       case 'missing-email':

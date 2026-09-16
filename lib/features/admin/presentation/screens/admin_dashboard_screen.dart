@@ -289,7 +289,6 @@ class _QuickActions extends StatelessWidget {
       ('New simulation', Icons.terminal_rounded, AppRoutes.adminSimulations),
       ('Manage users', Icons.manage_accounts_rounded, AppRoutes.adminStudents),
       ('Announcement', Icons.campaign_rounded, AppRoutes.adminAnnouncements),
-      ('AI generation', Icons.auto_awesome_rounded, AppRoutes.adminSyllabus),
     ];
     return Semantics(
       label: 'Admin quick actions',

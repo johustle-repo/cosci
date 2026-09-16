@@ -56,6 +56,16 @@ class FirestoreService {
     return _firestore.collection('lessons');
   }
 
+  CollectionReference<Map<String, dynamic>> ccsMasterlistCollection() {
+    return _firestore.collection('ccs_masterlist');
+  }
+
+  DocumentReference<Map<String, dynamic>> ccsMasterlistDocument(
+    String studentNumber,
+  ) {
+    return ccsMasterlistCollection().doc(studentNumber);
+  }
+
   DocumentReference<Map<String, dynamic>> lessonDocument(String lessonId) {
     return lessonsCollection().doc(lessonId);
   }

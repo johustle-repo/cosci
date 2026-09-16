@@ -249,7 +249,7 @@ class _LessonSimulationGeneratorDialogState
 
     return AdminSimulation(
       id: '',
-      title: '${lesson.topic} in $language — Interactive Simulation',
+      title: 'Practice: ${lesson.topic} in $language',
       topic: lesson.topic,
       language: language,
       difficulty: lesson.difficulty,

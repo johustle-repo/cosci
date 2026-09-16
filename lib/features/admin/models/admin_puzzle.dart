@@ -98,7 +98,7 @@ class AdminPuzzle {
       scrambledLines: _stringList(map['scrambledLines']),
       correctOrder: _stringList(map['correctOrder']),
       outputChoices: _stringList(map['outputChoices']),
-      // AI may store this as int (0, 1, …) or String — normalise to String
+      // Generated data may store this as int or String; normalise to String.
       correctOutputId: map['correctOutputId']?.toString(),
       bugDescription: map['bugDescription'] as String?,
       bugAnswer: map['bugAnswer'] as String?,
