@@ -1,211 +1,361 @@
-# CoSci
+# CoSci System Features and Capabilities
 
-A Flutter learning platform for coding lessons, quizzes, simulations, puzzles,
-progress tracking, and admin-managed content.
+CoSci is a role-based, gamified programming learning system for students of the Pangasinan State University College of Computing Sciences. It provides guided lessons, executable coding activities, assessments, progress monitoring, and content-management tools.
 
-## Software Prerequisites
+## Shared and Authentication Screens
 
-Install the following software before setting up CoSci:
+### Startup and Access Gate
 
-| Software | Required version | Purpose |
-| --- | --- | --- |
-| Git | Latest stable | Clone and manage the source code. |
-| Flutter SDK | Stable with Dart `3.10.8` or newer | Build and run the Flutter application. |
-| Node.js | `22 LTS` or newer | Run the local compiler gateway and Firebase tooling. |
-| npm | Included with Node.js | Install JavaScript dependencies and run project scripts. |
-| Google Chrome | Latest stable | Run and test the Flutter web application. |
-| Firebase CLI | Latest stable | Deploy Firestore rules, indexes, and optional Cloud Functions. |
-| FlutterFire CLI | Latest stable | Generate Firebase configuration for supported Flutter platforms. |
+**Purpose:** Determine where a user should go based on authentication, verification, account, and role status.
 
-Choose one compiler setup:
+- Initializes Firebase and application services.
+- Restores signed-in sessions.
+- Enforces email and Student ID verification.
+- Routes each user to the correct workspace.
+- Blocks suspended, archived, or incomplete accounts.
 
-| Compiler option | Additional requirements |
-| --- | --- |
-| Docker (recommended) | Docker Desktop with Docker Compose. The container installs C++ `g++` and OpenJDK automatically. |
-| Local compiler service | A C++17-compatible `g++` compiler and a Java JDK containing both `java` and `javac`. JavaScript uses the installed Node.js runtime. |
+### Get Started
 
-Optional development software:
+**Purpose:** Introduce CoSci and provide a clear entry point into the system.
 
-- Android Studio with the Android SDK and an emulator for Android builds.
-- Visual Studio 2022 with the **Desktop development with C++** workload for
-  Windows desktop builds.
-- Visual Studio Code or Android Studio as the code editor.
-- Java 17 or 21 when running the compiler locally. A project-local JDK may be
-  placed under `.tools/jdk21/<jdk-folder>/bin`; the compiler service detects it
-  automatically on Windows.
+- Summarizes the main learning capabilities.
+- Provides Create Account and Sign In actions.
+- Adapts to mobile, tablet, and desktop screens.
 
-Verify the main tools in PowerShell:
+### Create Account
 
-```powershell
-git --version
-flutter doctor
-dart --version
-node --version
-npm.cmd --version
-firebase.cmd --version
-```
+**Purpose:** Create a secure student account with the academic information needed to personalize learning.
 
-For a local compiler installation, also verify:
+- Collects full name, program, year level, email, and password.
+- Accepts only PSU institutional addresses ending in `@psu.edu.ph`.
+- Validates password strength and confirmation.
+- Creates authentication, profile, and progress records.
+- Sends the student to email verification.
 
-```powershell
-g++ --version
-javac -version
-java -version
-```
+### Sign In
 
-Install the required command-line tools after Node.js and Flutter are ready:
+**Purpose:** Authenticate users and open the workspace assigned to their role.
 
-```powershell
-npm.cmd install
-npm.cmd install --global firebase-tools
-dart pub global activate flutterfire_cli
-flutter pub get
-```
+- Signs users in using email and password.
+- Resumes verification for unverified accounts.
+- Enforces account and role restrictions.
+- Redirects students, instructors, and administrators appropriately.
 
-Firebase project access is also required. Enable Firebase Authentication
-(Email/Password), Cloud Firestore, and App Check for the platforms being used.
-Deploying Cloud Functions requires a Firebase Blaze plan; the core application,
-Firestore, Authentication, and the local compiler can be developed without
-deploying Functions.
+### Email Verification
 
-## Compiler Integration
+**Purpose:** Confirm ownership of the registered email before protected access is granted.
 
-CoSci includes a small self-hosted compiler gateway for C++, Java, and
-JavaScript. The recommended setup packages all runtimes in one container:
+- Displays verification instructions and the registered address.
+- Resends verification emails.
+- Refreshes the verification state.
+- Sends verified students to Student ID Verification.
 
-```powershell
-docker compose -f docker-compose.compiler.yml up -d --build
-flutter run -d chrome --dart-define=COMPILER_API_URL=http://localhost:8787/api/v2/execute
-```
+### Student ID Verification
 
-For local development without Docker, install Node.js, `g++`, and a Java JDK,
-then start the compiler and Flutter web app together with one command:
+**Purpose:** Restrict student access to eligible CCS students and prevent identity reuse.
 
-```powershell
-npm.cmd run dev:web
-```
+- Accepts an ID photo from the camera or gallery.
+- Extracts the student name, number, institution, and program through OCR.
+- Lets students review and correct extracted information.
+- Sets the institution to Pangasinan State University during confirmation.
+- Accepts BS Information Technology, BS Computer Science, and BS Mathematics.
+- Normalizes common program-name and OCR variations.
+- Compares the ID name with the registered account name.
+- Prevents one student number from being used by multiple accounts.
+- Saves successful verification and redirects to the dashboard.
+- Shows review-required and non-CCS rejection messages.
 
-This command starts the bundled compiler when needed, waits until it is ready,
-and launches Chrome with the compiler and secure quiz evaluator URLs configured.
-It also reuses a compiler that is already listening on port `8787`.
+### Forgot Password
 
-To run the two processes separately instead, use:
+**Purpose:** Help users regain account access securely.
 
-```powershell
-npm.cmd run compiler:start
-flutter run -d chrome --dart-define=COMPILER_API_URL=http://localhost:8787/api/v2/execute
-```
+- Validates the submitted email.
+- Sends password-reset instructions.
+- Displays clear success and error feedback.
 
-Firebase Hosting only serves static web files and cannot automatically start
-Node.js, `g++`, or Java processes. A deployed CoSci build therefore needs a
-separately hosted HTTPS compiler service and an explicit `COMPILER_API_URL`.
+### Account and Security
 
-The same local service also grades quizzes securely at
-`http://localhost:8787/quiz/evaluate`. Localhost builds discover this endpoint
-automatically. The service needs Firebase Admin credentials so it can verify
-learners, read protected answer keys, and save attempts:
+**Purpose:** Let users review their identity, profile, and account security.
 
-```powershell
-$env:GOOGLE_APPLICATION_CREDENTIALS="C:\path\to\firebase-adminsdk.json"
-npm.cmd run compiler:start
-```
+- Displays name, institutional email, role, and academic details.
+- Supports permitted profile updates.
+- Allows password changes after confirmation.
+- Provides password-reset, privacy, support, and platform information.
 
-For a hosted build, provide the public HTTPS evaluator URL explicitly:
+## Student Screens
 
-```powershell
-flutter build web --dart-define=QUIZ_EVALUATOR_URL=https://your-service.example/quiz/evaluate
-```
+### Student Dashboard
 
-Check compiler health at:
+**Purpose:** Give students a simple overview of their learning status and activities.
 
-```text
-http://localhost:8787/api/v2/runtimes
-```
+- Displays XP, level, streak, completion, and recent badges.
+- Links to lessons, simulations, quizzes, puzzles, achievements, and progress.
+- Provides loading, empty, and retry states.
 
-## Trusted simulation evaluation
+### Lessons
 
-Hidden simulation tests are stored in the admin-only
-`simulation_private_tests` collection and evaluated by the
-`evaluateSimulation` Firebase Function. Configure `COMPILER_API_URL` for the
-Function, deploy it, and start Flutter with both endpoints:
+**Purpose:** Organize guided learning materials available to the student.
 
-```powershell
-cd functions
-npm install
-firebase functions:secrets:set COMPILER_API_URL
-firebase deploy --only functions:evaluateSimulation,firestore:rules
-flutter run -d chrome --dart-define=COMPILER_API_URL=https://your-compiler.example/api/v2/execute --dart-define=SIMULATION_EVALUATOR_URL=https://REGION-PROJECT.cloudfunctions.net/evaluateSimulation
-```
+- Lists published lessons for the student's program and year level.
+- Displays topic, language, difficulty, and completion information.
+- Opens lesson details while hiding unpublished content.
 
-Existing simulations that stored hidden cases in their public `testCases`
-field must be opened and saved once by an administrator to migrate those cases
-to the private collection.
+### Lesson Detail
 
-Production deployments should host the compiler behind HTTPS with rate limits,
-request-size limits, execution timeouts, and disabled outbound network access.
-Compiler failures are reported as syntax/compilation errors, runtime failures
-separately, and successful runs with unexpected output as possible logic errors.
+**Purpose:** Teach one programming concept through structured explanations and examples.
 
-### Render deployment
+- Presents objectives, prerequisites, introduction, and key concepts.
+- Displays correctly numbered algorithm steps.
+- Includes worked examples, mistakes, error guidance, and summaries.
+- Shows optional pseudocode and runnable code.
+- Reorganizes content safely on small screens.
 
-The repository includes a `render.yaml` Blueprint for deploying the bundled
-compiler as a Docker web service. Push the complete project to GitHub, create a
-Render Blueprint from that repository, and wait for the `/api/v2/runtimes`
-health check to pass. Then rebuild the Flutter site with the service URL:
+### Code Simulation
 
-```powershell
-$compilerOrigin = "https://cosci-compiler.onrender.com"
-flutter build web --release `
-  --dart-define=COMPILER_API_URL="$compilerOrigin/api/v2/execute" `
-  --dart-define=QUIZ_EVALUATOR_URL="$compilerOrigin/quiz/evaluate"
-firebase.cmd deploy --only hosting --project psueducode-apk
-```
+**Purpose:** Let students edit, run, test, and submit programming solutions.
 
-Replace the example origin with the exact URL assigned by Render. Keep Firebase
-Admin credentials in a Render secret file if online quiz grading is enabled;
-never commit the service-account JSON to Git.
+- Supports C++, Java, and JavaScript.
+- Provides starter code, editor, standard input, and console output.
+- Runs code through the hosted compiler service.
+- Handles terminal-compatible Java `Scanner` input.
+- Separates compilation, runtime, timeout, and logic errors.
+- Provides reset and copy-output actions.
+- Shows a lesson-related engagement task.
+- Evaluates public and protected test cases.
+- Records attempts, completion, XP, and rewards.
 
-Pseudocode execution is outside the implementation scope. CoSci concentrates on
-the execution behavior of actual C++, Java, and JavaScript programs.
+### Quizzes
 
-## Getting Started
+**Purpose:** Measure understanding of lesson concepts.
 
-This project is a starting point for a Flutter application.
+- Lists published quizzes and their lesson context.
+- Provides question navigation and answer selection.
+- Grades attempts through the trusted evaluator when configured.
+- Displays scores, explanations, and completion feedback.
+- Records attempts and updates progress.
 
-A few resources to get you started if this is your first Flutter project:
+### Puzzles
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+**Purpose:** Reinforce syntax and algorithm sequencing through interactive challenges.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- Lists published puzzles by topic and difficulty.
+- Lets students arrange or select code pieces.
+- Validates solutions and displays feedback or hints.
+- Updates attempts, XP, streak, and badge progress.
 
-## Seed Accounts
+### Gamification and Achievements
 
-You can seed the default Firebase Authentication + Firestore accounts for:
+**Purpose:** Encourage participation by recognizing milestones and consistency.
 
-| Role | Email | Password |
-| --- | --- | --- |
-| Admin | `admin@psu-educode.app` | `Admin123!` |
-| Admin | `admin@psu.edu.ph` | `Admin123!` |
-| Student | `student@psu-educode.app` | `Student123!` |
-| Professor | `professor@psu-educode.app` | `Professor123!` |
+- Displays XP, level, rank, streaks, quests, and badges.
+- Unlocks achievements when requirements are met.
+- Shows badge and milestone details.
+- Generates downloadable PDF achievement certificates.
 
-Local MySQL/MariaDB admin account added to `psu_educode_db.users`:
+### Progress Tracking
 
-| Role | Email | Password |
-| --- | --- | --- |
-| Admin | `admin@psu.edu.ph` | `Admin123!` |
+**Purpose:** Help students understand their learning growth and completed work.
 
-Pass the passwords with `--dart-define`:
+- Summarizes lessons, quizzes, puzzles, simulations, badges, XP, and streaks.
+- Displays recent learning activity.
+- Synchronizes data with instructor and admin reports.
 
-```powershell
-flutter run -d chrome -t tool/seed_accounts.dart `
-  --dart-define=PSU_ADMIN_PASSWORD=Admin123! `
-  --dart-define=PSU_STUDENT_PASSWORD=Student123! `
-  --dart-define=PSU_PROFESSOR_PASSWORD=Professor123!
-```
+## Instructor Screens
 
-The seeder will create the Firebase Auth users if they do not exist, then upsert
-their Firestore role/profile/progress data.
+### Instructor Dashboard
+
+**Purpose:** Show participation, learner difficulties, and work needing attention.
+
+- Displays participation and recent attempts.
+- Provides an instructor review queue.
+- Identifies learners needing intervention.
+- Shows coverage by language and weak topics.
+- Opens learner attempts for review and feedback.
+- Links to analytics and content previews.
+
+### Student Management
+
+**Purpose:** Monitor individual learners and provide targeted support.
+
+- Lists students with program, year level, attempts, and success rate.
+- Searches by learner name or email.
+- Filters by program and year level.
+- Displays recent and unsuccessful attempts.
+
+### Class Analytics
+
+**Purpose:** Turn class activity into useful teaching information.
+
+- Summarizes attempts, pass rates, participation, languages, and topics.
+- Identifies weak topics and common failure patterns.
+- Uses current learner and attempt records.
+
+### Lesson Library
+
+**Purpose:** Review lessons available to students.
+
+- Lists published lessons.
+- Opens student-facing previews without changing content.
+
+### Simulation Preview
+
+**Purpose:** Inspect coding activities before guiding students.
+
+- Displays published tasks, languages, starter code, and expected behavior.
+- Prevents previews from affecting student progress.
+
+### Quiz Preview
+
+**Purpose:** Verify assessment coverage and clarity.
+
+- Displays published quizzes and questions in preview mode.
+- Does not create student attempts or scores.
+
+### Puzzle Preview
+
+**Purpose:** Review puzzle instructions and learning alignment.
+
+- Displays published puzzle content and interaction design.
+- Does not modify student progress.
+
+## Administrator Screens
+
+### Admin Dashboard
+
+**Purpose:** Provide a central overview of users, content, and system activity.
+
+- Displays platform totals and activity statistics.
+- Provides shortcuts to management screens.
+- Shows recent administrative actions.
+
+### Users
+
+**Purpose:** Manage every account and inspect learning and verification information.
+
+- Displays name, email, date, role, level, XP, streak, and badges.
+- Shows Student ID status as Verified, Pending, or Not required.
+- Separates identity verification from Active or Inactive status.
+- Supports searching and filtering.
+- Changes roles and activates, suspends, views, or deletes accounts.
+
+### Student Profile
+
+**Purpose:** Provide a detailed administrative view of one learner.
+
+- Displays account, academic, progress, and activity information.
+- Identifies incomplete profile data.
+- Allows account activation or suspension.
+
+### Lessons Management
+
+**Purpose:** Create and maintain structured learning material.
+
+- Creates, edits, previews, publishes, unpublishes, and deletes lessons.
+- Configures audience, language, difficulty, order, and duration.
+- Manages objectives, concepts, algorithms, examples, mistakes, and summaries.
+- Stores runnable code, standard input, and expected output.
+- Compiles and validates examples before publishing.
+
+### Lesson Generator
+
+**Purpose:** Speed up lesson preparation while keeping administrator review.
+
+- Builds structured lesson drafts from topic or syllabus data.
+- Allows every field to be reviewed and edited before saving.
+
+### Simulations Management
+
+**Purpose:** Build practical coding exercises with verifiable behavior.
+
+- Creates, edits, previews, publishes, and deletes simulations.
+- Configures lessons, languages, tasks, starter code, hints, and output.
+- Manages public and protected test cases.
+- Validates code through the compiler service.
+
+### Quizzes Management
+
+**Purpose:** Create and control lesson-based assessments.
+
+- Creates quizzes manually or drafts them from lessons.
+- Manages questions, choices, correct answers, explanations, and scores.
+- Previews, publishes, unpublishes, and deletes quizzes.
+
+### Puzzles Management
+
+**Purpose:** Create interactive syntax and code-order exercises.
+
+- Creates, edits, previews, publishes, and deletes puzzles.
+- Configures language, topic, difficulty, code pieces, solution, hints, and rewards.
+
+### Gamification Management
+
+**Purpose:** Define how participation and achievement are rewarded.
+
+- Manages badge definitions and milestone requirements.
+- Configures activity and rank achievements.
+- Installs the starter badge collection.
+
+### Daily Challenges
+
+**Purpose:** Provide scheduled activities that encourage regular practice.
+
+- Creates and schedules challenges.
+- Links challenges to valid learning activities.
+- Controls draft, active, and archived states.
+- Prevents activation when linked content is missing.
+
+### Announcements
+
+**Purpose:** Communicate updates to selected user groups.
+
+- Creates, edits, publishes, and removes announcements.
+- Selects the audience, visibility dates, and status.
+
+### Reports and Analytics
+
+**Purpose:** Evaluate system use and learner performance.
+
+- Displays strongest and weakest topics.
+- Shows learner rankings with XP, level, streak, and badges.
+- Includes registered learners without activity.
+- Compares quiz results across programs.
+- Identifies questions, simulations, and error categories needing review.
+
+### Settings
+
+**Purpose:** Control reusable configuration and system behavior.
+
+- Manages course topics and module visibility.
+- Reviews administrative roles and permissions.
+- Supports backup and restore workflows.
+- Configures maintenance mode and its message.
+
+### Activity Logs
+
+**Purpose:** Maintain accountability for administrative changes.
+
+- Records the administrator, action, target, and timestamp.
+- Supports searching and reviewing historical actions.
+
+### Supporting Syllabus and Content Screens
+
+**Purpose:** Turn syllabus information into editable content drafts.
+
+- Uploads documents or accepts pasted syllabus content.
+- Extracts units, topics, and learning outcomes.
+- Creates draft lessons, quizzes, puzzles, and simulations.
+- Tracks completed, skipped, and failed generation work.
+- These routes are retained but hidden from the main admin sidebar.
+
+## System-Wide Capabilities
+
+- Role-based access for students, instructors, and administrators.
+- Firebase Authentication, verified-email gating, and account-state enforcement.
+- Firestore persistence for profiles, content, attempts, progress, and logs.
+- OCR-assisted ID extraction, CCS eligibility, name matching, and duplicate-ID prevention.
+- Hosted C++, Java, and JavaScript compilation with safe timeouts.
+- Trusted quiz and simulation evaluation using protected data.
+- Progress synchronization across student, instructor, and admin views.
+- PDF achievement certificates and web/native downloads.
+- Responsive mobile, tablet, and desktop interfaces.
+- Loading, empty, offline, error, retry, and recovery states.

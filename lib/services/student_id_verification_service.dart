@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -103,7 +104,23 @@ class StudentIdVerificationService {
 
   Future<Map<String, String>> _authHeaders() async {
     final user = FirebaseAuth.instance.currentUser;
-    final token = await user?.getIdToken(true);
+    String? token;
+    try {
+      token = await user?.getIdToken().timeout(const Duration(seconds: 20));
+    } on TimeoutException {
+      throw StateError(
+        'We could not check your sign-in session. Check your connection and try again.',
+      );
+    } on FirebaseAuthException catch (error) {
+      if (error.code == 'network-request-failed') {
+        throw StateError(
+          'Could not connect to the sign-in service. Check your connection and try again.',
+        );
+      }
+      throw StateError(
+        'Your sign-in session could not be validated. Sign out, sign in again, then retry ID verification.',
+      );
+    }
     if (user == null || token == null) {
       throw StateError('Your session expired. Sign in again.');
     }
@@ -114,9 +131,23 @@ class StudentIdVerificationService {
   }
 
   StudentIdVerificationResult _parseResponse(http.Response response) {
+    if (response.statusCode == 401) {
+      throw StateError(
+        'Your session expired. Sign out and sign in again, then retry ID verification.',
+      );
+    }
+    if ([502, 503, 504].contains(response.statusCode)) {
+      throw StateError(
+        'The ID verification service is temporarily unavailable. Your photo and entered details have been kept. Please try again shortly.',
+      );
+    }
     Map<String, dynamic> data;
     try {
-      data = jsonDecode(response.body) as Map<String, dynamic>;
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('Expected an object');
+      }
+      data = decoded;
     } on FormatException {
       throw StateError(
         'The verification service returned an invalid response. Please try again.',
@@ -140,6 +171,32 @@ class StudentIdVerificationService {
     );
   }
 
+  Future<StudentIdVerificationResult> _submit(
+    Map<String, dynamic> payload, {
+    required Duration timeout,
+  }) async {
+    final headers = await _authHeaders();
+    final client = http.Client();
+    try {
+      final response = await client
+          .post(_endpoint, headers: headers, body: jsonEncode(payload))
+          .timeout(timeout);
+      return _parseResponse(response);
+    } on TimeoutException {
+      throw StateError(
+        payload['action'] == 'scan'
+            ? 'Reading your ID took too long. Your photo is still selected. Please try again shortly.'
+            : 'Verification did not respond in time. Your details have been kept. Please retry confirmation.',
+      );
+    } on http.ClientException {
+      throw StateError(
+        'Could not connect to ID verification. Check your connection and try again. Your photo and details have been kept.',
+      );
+    } finally {
+      client.close();
+    }
+  }
+
   /// Uploads a fresh photo for OCR extraction and an eligibility preview.
   /// Never marks the account as verified — only `confirm` does that.
   Future<StudentIdVerificationResult> scan({
@@ -147,35 +204,22 @@ class StudentIdVerificationService {
     required String mimeType,
     String studentNumber = '',
   }) async {
-    final headers = await _authHeaders();
-    final response = await http
-        .post(
-          _endpoint,
-          headers: headers,
-          body: jsonEncode({
-            'action': 'scan',
-            'imageBase64': base64Encode(imageBytes),
-            'mimeType': mimeType,
-            'studentNumber': studentNumber.trim().toUpperCase(),
-          }),
-        )
-        .timeout(const Duration(seconds: 60));
-    return _parseResponse(response);
+    return _submit({
+      'action': 'scan',
+      'imageBase64': base64Encode(imageBytes),
+      'mimeType': mimeType,
+      'studentNumber': studentNumber.trim().toUpperCase(),
+    }, timeout: const Duration(seconds: 120));
   }
 
-  /// Submits the student-reviewed fields for final masterlist validation.
+  /// Submits the student-reviewed fields for final server validation.
   /// OCR is intentionally not run again during confirmation.
   Future<StudentIdVerificationResult> confirm({
     required StudentIdFields fields,
   }) async {
-    final headers = await _authHeaders();
-    final response = await http
-        .post(
-          _endpoint,
-          headers: headers,
-          body: jsonEncode({'action': 'confirm', 'fields': fields.toMap()}),
-        )
-        .timeout(const Duration(seconds: 60));
-    return _parseResponse(response);
+    return _submit({
+      'action': 'confirm',
+      'fields': fields.toMap(),
+    }, timeout: const Duration(seconds: 60));
   }
 }
