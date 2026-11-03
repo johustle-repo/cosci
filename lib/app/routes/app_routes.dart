@@ -38,6 +38,7 @@ class AppRoutes {
   static const String adminChallenges = '/admin/challenges';
   static const String adminAnnouncements = '/admin/announcements';
   static const String adminReports = '/admin/reports';
+  static const String adminStudentAnalytics = '/admin/student-analytics';
   static const String adminSettings = '/admin/settings';
   static const String adminActivityLogs = '/admin/activity-logs';
 

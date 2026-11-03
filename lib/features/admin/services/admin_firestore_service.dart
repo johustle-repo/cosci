@@ -10,6 +10,7 @@ import 'package:pseudocode_apk/features/admin/models/admin_puzzle.dart';
 import 'package:pseudocode_apk/features/admin/models/admin_quiz.dart';
 import 'package:pseudocode_apk/features/admin/models/admin_settings.dart';
 import 'package:pseudocode_apk/features/admin/models/admin_simulation.dart';
+import 'package:pseudocode_apk/features/admin/models/admin_student_analytics.dart';
 import 'package:pseudocode_apk/features/admin/models/admin_student_profile.dart';
 import 'package:pseudocode_apk/services/firestore_service.dart';
 
@@ -1168,6 +1169,49 @@ class AdminFirestoreService {
   }
 
   /// Fetch most active students by total XP.
+  /// Raw data for the Student Analytics page: every graded quiz attempt and
+  /// the published content totals used for completion percentages.
+  Future<({List<StudentQuizAttempt> attempts, ContentTotals totals})>
+  fetchStudentAnalyticsData() async {
+    final results = await Future.wait<Object>([
+      _db.collection('quiz_attempts').limit(5000).get(),
+      _db.collection('quizzes').get(),
+      _db
+          .collection('lessons')
+          .where('isPublished', isEqualTo: true)
+          .count()
+          .get(),
+      _db
+          .collection('puzzles')
+          .where('isPublished', isEqualTo: true)
+          .count()
+          .get(),
+    ]);
+    final attemptsSnap = results[0] as QuerySnapshot<Map<String, dynamic>>;
+    final quizzesSnap = results[1] as QuerySnapshot<Map<String, dynamic>>;
+    final lessonCount = results[2] as AggregateQuerySnapshot;
+    final puzzleCount = results[3] as AggregateQuerySnapshot;
+
+    final publishedQuizzes = quizzesSnap.docs.where(
+      (doc) => doc.data()['isPublished'] == true,
+    );
+    return (
+      attempts: attemptsSnap.docs
+          .map((doc) => StudentQuizAttempt.fromMap(doc.data()))
+          .where((attempt) => attempt.userId.isNotEmpty)
+          .toList(),
+      totals: ContentTotals(
+        lessons: lessonCount.count ?? 0,
+        quizzes: publishedQuizzes.length,
+        puzzles: puzzleCount.count ?? 0,
+        quizAttemptLimits: {
+          for (final doc in quizzesSnap.docs)
+            doc.id: (doc.data()['attemptLimit'] as num?)?.toInt() ?? 3,
+        },
+      ),
+    );
+  }
+
   Future<List<Map<String, dynamic>>> fetchTopStudentsByXp({
     int limit = 10,
   }) async {

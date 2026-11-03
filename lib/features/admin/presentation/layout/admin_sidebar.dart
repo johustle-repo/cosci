@@ -61,6 +61,11 @@ const _navItems = [
     route: AppRoutes.adminReports,
   ),
   _NavItem(
+    label: 'Student Analytics',
+    icon: Icons.insights_rounded,
+    route: AppRoutes.adminStudentAnalytics,
+  ),
+  _NavItem(
     label: 'Announcements',
     icon: Icons.campaign_rounded,
     route: AppRoutes.adminAnnouncements,

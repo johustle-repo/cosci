@@ -14,6 +14,7 @@ import 'package:pseudocode_apk/features/admin/presentation/screens/admin_masterl
 import 'package:pseudocode_apk/features/admin/presentation/screens/admin_puzzles_screen.dart';
 import 'package:pseudocode_apk/features/admin/presentation/screens/admin_quizzes_screen.dart';
 import 'package:pseudocode_apk/features/admin/presentation/screens/admin_reports_screen.dart';
+import 'package:pseudocode_apk/features/admin/presentation/screens/admin_student_analytics_screen.dart';
 import 'package:pseudocode_apk/features/admin/presentation/screens/admin_settings_screen.dart';
 import 'package:pseudocode_apk/features/admin/presentation/screens/admin_simulations_screen.dart';
 import 'package:pseudocode_apk/features/admin/presentation/screens/admin_student_detail_screen.dart';
@@ -213,6 +214,11 @@ class AppRouter {
         );
       case AppRoutes.adminReports:
         return _build(const AdminGuard(child: AdminReportsScreen()), settings);
+      case AppRoutes.adminStudentAnalytics:
+        return _build(
+          const AdminGuard(child: AdminStudentAnalyticsScreen()),
+          settings,
+        );
       case AppRoutes.adminSettings:
         return _build(const AdminGuard(child: AdminSettingsScreen()), settings);
       case AppRoutes.adminActivityLogs:

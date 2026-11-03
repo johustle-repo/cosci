@@ -11,6 +11,7 @@ import 'package:pseudocode_apk/features/admin/providers/admin_masterlist_provide
 import 'package:pseudocode_apk/features/admin/providers/admin_puzzles_provider.dart';
 import 'package:pseudocode_apk/features/admin/providers/admin_quizzes_provider.dart';
 import 'package:pseudocode_apk/features/admin/providers/admin_reports_provider.dart';
+import 'package:pseudocode_apk/features/admin/providers/admin_student_analytics_provider.dart';
 import 'package:pseudocode_apk/features/admin/providers/admin_settings_provider.dart';
 import 'package:pseudocode_apk/features/admin/providers/admin_simulations_provider.dart';
 import 'package:pseudocode_apk/features/admin/providers/admin_students_provider.dart';
@@ -174,6 +175,13 @@ class AppProviders {
     ),
     ChangeNotifierProxyProvider<AdminFirestoreService, AdminReportsProvider>(
       create: (_) => AdminReportsProvider(),
+      update: (_, adminService, provider) => provider!..attach(adminService),
+    ),
+    ChangeNotifierProxyProvider<
+      AdminFirestoreService,
+      AdminStudentAnalyticsProvider
+    >(
+      create: (_) => AdminStudentAnalyticsProvider(),
       update: (_, adminService, provider) => provider!..attach(adminService),
     ),
     ChangeNotifierProxyProvider<AdminFirestoreService, AdminLogsProvider>(
