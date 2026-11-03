@@ -97,6 +97,9 @@ CoSci is a role-based, gamified programming learning system for students of the 
 **Purpose:** Organize guided learning materials available to the student.
 
 - Lists published lessons for the student's program and year level.
+- Applies a year-level language rule: 1st Year students see only C++ lessons, while 2nd Year students see lessons in every available language (C++, Java, and JavaScript).
+- Unlocks lessons one at a time in lesson order: only the first lesson is open at the start, and each next lesson unlocks after the current one is completed. Completed lessons stay open for review; locked lessons show a lock and cannot be opened.
+- Recommends the current unlocked lesson as the next step.
 - Displays topic, language, difficulty, and completion information.
 - Opens lesson details while hiding unpublished content.
 
@@ -129,6 +132,7 @@ CoSci is a role-based, gamified programming learning system for students of the 
 **Purpose:** Measure understanding of lesson concepts.
 
 - Lists published quizzes and their lesson context.
+- Unlocks quizzes one at a time: the next quiz unlocks after the current quiz is passed, or after all of its attempts are used so a student is never permanently blocked.
 - Provides question navigation and answer selection.
 - Grades attempts through the trusted evaluator when configured.
 - Displays scores, explanations, and completion feedback.
@@ -139,6 +143,7 @@ CoSci is a role-based, gamified programming learning system for students of the 
 **Purpose:** Reinforce syntax and algorithm sequencing through interactive challenges.
 
 - Lists published puzzles by topic and difficulty.
+- Unlocks puzzles one at a time: the next puzzle unlocks after the current puzzle is solved.
 - Lets students arrange or select code pieces.
 - Validates solutions and displays feedback or hints.
 - Updates attempts, XP, streak, and badge progress.
@@ -321,6 +326,16 @@ CoSci is a role-based, gamified programming learning system for students of the 
 - Compares quiz results across programs.
 - Identifies questions, simulations, and error categories needing review.
 
+### Student Analytics
+
+**Purpose:** Track each learner's progress, find students who need support, and rank learners.
+
+- Summarizes students, active learners this week, students needing help, average completion, and average quiz score.
+- Filters by name or email, program, and year level.
+- **Progress:** lists every student's completed lessons, passed quizzes, and solved puzzles against published totals, plus quiz average, completion percentage, XP and level, last activity, and status. Selecting a student opens their profile.
+- **Needs help:** flags students who have been inactive for 7+ days, have no completed activity, have a quiz average below 60%, failed the same quiz at least twice, or used every quiz attempt without passing. Students with two or more reasons, or who ran out of quiz attempts, are marked high priority. Accounts younger than 7 days are not flagged for inactivity or lack of progress.
+- **Leaderboard:** ranks students by total XP, completion, quiz average, or streak, with a top-three podium and a full ranked table.
+
 ### Settings
 
 **Purpose:** Control reusable configuration and system behavior.
@@ -346,6 +361,10 @@ CoSci is a role-based, gamified programming learning system for students of the 
 - Creates draft lessons, quizzes, puzzles, and simulations.
 - Tracks completed, skipped, and failed generation work.
 - These routes are retained but hidden from the main admin sidebar.
+
+## Backend Process: Syllabus Upload and Content Creation
+
+See [syllabus_process.md](syllabus_process.md) for the backend flow of syllabus uploading and lesson, quiz, and puzzle creation.
 
 ## System-Wide Capabilities
 
