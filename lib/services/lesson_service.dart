@@ -1,5 +1,6 @@
 import 'package:pseudocode_apk/models/lesson.dart';
 import 'package:pseudocode_apk/services/firestore_service.dart';
+import 'package:pseudocode_apk/services/lesson_language_policy.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class LessonService {
@@ -15,10 +16,22 @@ class LessonService {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     final user = uid == null ? null : await _firestoreService.fetchAppUser(uid);
 
+    // Year-level language rule applies to students only, so instructors and
+    // admins previewing lessons still see every language.
+    final isStudent = user == null || user.normalizedRole == 'student';
+
     final lessons = snapshot.docs
         .where((doc) => _eligible(doc.data(), user?.program, user?.yearLevel))
         .map((doc) => Lesson.fromMap(doc.id, doc.data()))
         .where((lesson) => lesson.isPublished)
+        .where(
+          (lesson) =>
+              !isStudent ||
+              LessonLanguagePolicy.allows(
+                yearLevel: user?.yearLevel,
+                language: lesson.language,
+              ),
+        )
         .toList();
 
     lessons.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
