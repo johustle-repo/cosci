@@ -4,6 +4,7 @@ import 'package:pseudocode_apk/models/puzzle.dart';
 import 'package:pseudocode_apk/providers/auth_provider.dart';
 import 'package:pseudocode_apk/providers/gamification_provider.dart';
 import 'package:pseudocode_apk/services/puzzle_service.dart';
+import 'package:pseudocode_apk/services/sequential_unlock_policy.dart';
 
 class PuzzlesProvider extends ChangeNotifier {
   PuzzleService? _puzzleService;
@@ -37,6 +38,24 @@ class PuzzlesProvider extends ChangeNotifier {
 
   PuzzleProgress progressFor(String puzzleId) {
     return _progressByPuzzleId[puzzleId] ?? PuzzleProgress.empty;
+  }
+
+  // Puzzles unlock one at a time in list order: a puzzle opens only after
+  // every puzzle before it has been solved.
+  List<bool> get _finished =>
+      _puzzles.map((puzzle) => progressFor(puzzle.id).isCompleted).toList();
+
+  Set<String> get unlockedPuzzleIds => SequentialUnlockPolicy.unlockedIds(
+    _puzzles.map((puzzle) => puzzle.id).toList(),
+    _finished,
+  );
+
+  bool isUnlocked(String puzzleId) => unlockedPuzzleIds.contains(puzzleId);
+
+  /// The puzzle the student must solve next, or null when all are solved.
+  Puzzle? get currentPuzzle {
+    final index = SequentialUnlockPolicy.currentIndex(_finished);
+    return index < _puzzles.length ? _puzzles[index] : null;
   }
 
   Future<void> loadPuzzles({bool forceRefresh = false}) async {

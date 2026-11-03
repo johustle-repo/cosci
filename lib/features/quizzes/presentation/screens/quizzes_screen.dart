@@ -89,141 +89,175 @@ class _QuizzesScreenState extends State<QuizzesScreen> {
                             0,
                             quiz.attemptLimit,
                           );
-                      return Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(18),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    width: 56,
-                                    height: 56,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(18),
-                                      gradient: const LinearGradient(
-                                        colors: [
-                                          Color(0xFF123D9B),
-                                          Color(0xFF56C4FF),
+                      final locked = !quizzesProvider.isUnlocked(quiz.id);
+                      final blocker = quizzesProvider.currentQuiz;
+                      return Opacity(
+                        opacity: locked ? 0.55 : 1,
+                        child: Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: 56,
+                                      height: 56,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(18),
+                                        gradient: const LinearGradient(
+                                          colors: [
+                                            Color(0xFF123D9B),
+                                            Color(0xFF56C4FF),
+                                          ],
+                                        ),
+                                      ),
+                                      child: Icon(
+                                        locked
+                                            ? Icons.lock_rounded
+                                            : Icons.quiz_rounded,
+                                        color: Colors.white,
+                                        semanticLabel: locked
+                                            ? 'Locked quiz'
+                                            : null,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            quiz.title,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .titleMedium
+                                                ?.copyWith(
+                                                  fontWeight: FontWeight.w800,
+                                                ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Wrap(
+                                            spacing: 8,
+                                            runSpacing: 8,
+                                            children: [
+                                              InfoChip(
+                                                label:
+                                                    '${quiz.totalItems} items',
+                                              ),
+                                              InfoChip(label: quiz.language),
+                                              InfoChip(label: quiz.difficulty),
+                                              if (quiz.topic.isNotEmpty)
+                                                InfoChip(label: quiz.topic),
+                                              InfoChip(
+                                                label: '${quiz.xpReward} XP',
+                                                backgroundColor: const Color(
+                                                  0xFFFFF7ED,
+                                                ),
+                                                foregroundColor: const Color(
+                                                  0xFFC2410C,
+                                                ),
+                                              ),
+                                              InfoChip(
+                                                label:
+                                                    'Pass ${quiz.passingScore}%',
+                                                backgroundColor: const Color(
+                                                  0xFFE8F7EE,
+                                                ),
+                                                foregroundColor: const Color(
+                                                  0xFF15803D,
+                                                ),
+                                              ),
+                                              if (latest != null)
+                                                InfoChip(
+                                                  label: latest.passed
+                                                      ? 'Taken · Passed'
+                                                      : 'Taken · Needs retry',
+                                                  backgroundColor: latest.passed
+                                                      ? const Color(0xFFE8F7EE)
+                                                      : const Color(0xFFFFF3E6),
+                                                  foregroundColor: latest.passed
+                                                      ? const Color(0xFF15803D)
+                                                      : const Color(0xFFB45309),
+                                                ),
+                                            ],
+                                          ),
                                         ],
                                       ),
                                     ),
-                                    child: const Icon(
-                                      Icons.quiz_rounded,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          quiz.title,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleMedium
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.w800,
-                                              ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Wrap(
-                                          spacing: 8,
-                                          runSpacing: 8,
-                                          children: [
-                                            InfoChip(
-                                              label: '${quiz.totalItems} items',
-                                            ),
-                                            InfoChip(label: quiz.language),
-                                            InfoChip(label: quiz.difficulty),
-                                            if (quiz.topic.isNotEmpty)
-                                              InfoChip(label: quiz.topic),
-                                            InfoChip(
-                                              label: '${quiz.xpReward} XP',
-                                              backgroundColor: const Color(
-                                                0xFFFFF7ED,
-                                              ),
-                                              foregroundColor: const Color(
-                                                0xFFC2410C,
-                                              ),
-                                            ),
-                                            InfoChip(
-                                              label:
-                                                  'Pass ${quiz.passingScore}%',
-                                              backgroundColor: const Color(
-                                                0xFFE8F7EE,
-                                              ),
-                                              foregroundColor: const Color(
-                                                0xFF15803D,
-                                              ),
-                                            ),
-                                            if (latest != null)
-                                              InfoChip(
-                                                label: latest.passed
-                                                    ? 'Taken · Passed'
-                                                    : 'Taken · Needs retry',
-                                                backgroundColor: latest.passed
-                                                    ? const Color(0xFFE8F7EE)
-                                                    : const Color(0xFFFFF3E6),
-                                                foregroundColor: latest.passed
-                                                    ? const Color(0xFF15803D)
-                                                    : const Color(0xFFB45309),
-                                              ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 14),
+                                Text(
+                                  quiz.description,
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                                if (latest != null) ...[
+                                  const SizedBox(height: 14),
+                                  _TakenQuizSummary(
+                                    latestScore: latest.scorePercent,
+                                    bestScore: bestScore!,
+                                    passed: latest.passed,
+                                    attemptsUsed: attempts.length,
+                                    attemptLimit: quiz.attemptLimit,
                                   ),
                                 ],
-                              ),
-                              const SizedBox(height: 14),
-                              Text(
-                                quiz.description,
-                                style: Theme.of(context).textTheme.bodyMedium,
-                              ),
-                              if (latest != null) ...[
-                                const SizedBox(height: 14),
-                                _TakenQuizSummary(
-                                  latestScore: latest.scorePercent,
-                                  bestScore: bestScore!,
-                                  passed: latest.passed,
-                                  attemptsUsed: attempts.length,
-                                  attemptLimit: quiz.attemptLimit,
+                                const SizedBox(height: 16),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: FilledButton.icon(
+                                    onPressed: locked
+                                        ? () {
+                                            final messenger =
+                                                ScaffoldMessenger.of(context);
+                                            messenger.clearSnackBars();
+                                            messenger.showSnackBar(
+                                              SnackBar(
+                                                behavior:
+                                                    SnackBarBehavior.floating,
+                                                content: Text(
+                                                  blocker == null
+                                                      ? 'Finish the current quiz to unlock this one.'
+                                                      : 'Pass "${blocker.title}" first to unlock this quiz.',
+                                                ),
+                                              ),
+                                            );
+                                          }
+                                        : () {
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute<void>(
+                                                builder: (_) =>
+                                                    QuizPlayerScreen(
+                                                      quiz: quiz,
+                                                    ),
+                                              ),
+                                            );
+                                          },
+                                    icon: Icon(
+                                      locked
+                                          ? Icons.lock_rounded
+                                          : latest == null
+                                          ? Icons.play_circle_rounded
+                                          : attemptsRemaining > 0
+                                          ? Icons.replay_rounded
+                                          : Icons.visibility_rounded,
+                                    ),
+                                    label: Text(
+                                      locked
+                                          ? 'Locked · pass the previous quiz'
+                                          : latest == null
+                                          ? 'Start Quiz'
+                                          : attemptsRemaining > 0
+                                          ? 'Retake Quiz · $attemptsRemaining remaining'
+                                          : 'View Score · No attempts remaining',
+                                    ),
+                                  ),
                                 ),
                               ],
-                              const SizedBox(height: 16),
-                              SizedBox(
-                                width: double.infinity,
-                                child: FilledButton.icon(
-                                  onPressed: () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute<void>(
-                                        builder: (_) =>
-                                            QuizPlayerScreen(quiz: quiz),
-                                      ),
-                                    );
-                                  },
-                                  icon: Icon(
-                                    latest == null
-                                        ? Icons.play_circle_rounded
-                                        : attemptsRemaining > 0
-                                        ? Icons.replay_rounded
-                                        : Icons.visibility_rounded,
-                                  ),
-                                  label: Text(
-                                    latest == null
-                                        ? 'Start Quiz'
-                                        : attemptsRemaining > 0
-                                        ? 'Retake Quiz · $attemptsRemaining remaining'
-                                        : 'View Score · No attempts remaining',
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
                       );

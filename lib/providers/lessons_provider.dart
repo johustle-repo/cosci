@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:pseudocode_apk/models/lesson.dart';
 import 'package:pseudocode_apk/services/lesson_service.dart';
+import 'package:pseudocode_apk/services/sequential_unlock_policy.dart';
 
 class LessonsProvider extends ChangeNotifier {
   LessonService? _lessonService;
@@ -15,20 +16,29 @@ class LessonsProvider extends ChangeNotifier {
   bool get isEmpty => !_isLoading && _lessons.isEmpty && _errorMessage == null;
   Set<String> get completedLessonIds => _completedLessonIds;
   bool isCompleted(String lessonId) => _completedLessonIds.contains(lessonId);
+
+  // Lessons unlock one at a time in sortOrder: a lesson opens only after
+  // every lesson before it has been completed.
+  List<bool> get _finished =>
+      _lessons.map((lesson) => isCompleted(lesson.id)).toList();
+
+  Set<String> get unlockedLessonIds => SequentialUnlockPolicy.unlockedIds(
+    _lessons.map((lesson) => lesson.id).toList(),
+    _finished,
+  );
+
+  bool isUnlocked(String lessonId) => unlockedLessonIds.contains(lessonId);
+
+  /// The lesson the student must finish next, or null when all are complete.
+  Lesson? get currentLesson {
+    final index = SequentialUnlockPolicy.currentIndex(_finished);
+    return index < _lessons.length ? _lessons[index] : null;
+  }
+
+  /// With sequential unlocking, the only recommendation is the current lesson.
   List<Lesson> get recommendedLessons {
-    final pending = _lessons
-        .where((lesson) => !isCompleted(lesson.id))
-        .toList();
-    int rank(Lesson lesson) => switch (lesson.difficulty.toLowerCase()) {
-      'easy' => 0,
-      'medium' => 1,
-      _ => 2,
-    };
-    pending.sort((a, b) {
-      final difficulty = rank(a).compareTo(rank(b));
-      return difficulty != 0 ? difficulty : a.sortOrder.compareTo(b.sortOrder);
-    });
-    return pending.take(3).toList();
+    final current = currentLesson;
+    return current == null ? const [] : [current];
   }
 
   void attach(LessonService lessonService) {

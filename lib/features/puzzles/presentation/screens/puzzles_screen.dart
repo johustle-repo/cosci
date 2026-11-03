@@ -62,6 +62,8 @@ class _PuzzlesScreenState extends State<PuzzlesScreen> {
                 child: _PuzzleCard(
                   puzzle: puzzle,
                   progress: provider.progressFor(puzzle.id),
+                  locked: !provider.isUnlocked(puzzle.id),
+                  blockerTitle: provider.currentPuzzle?.title,
                 ),
               ),
             ),
@@ -221,158 +223,206 @@ class _HeroMetric extends StatelessWidget {
 }
 
 class _PuzzleCard extends StatelessWidget {
-  const _PuzzleCard({required this.puzzle, required this.progress});
+  const _PuzzleCard({
+    required this.puzzle,
+    required this.progress,
+    required this.locked,
+    this.blockerTitle,
+  });
 
   final Puzzle puzzle;
   final PuzzleProgress progress;
+  final bool locked;
+
+  /// Title of the puzzle that must be solved before this one unlocks.
+  final String? blockerTitle;
+
+  void _showLockedMessage(BuildContext context) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text(
+          blockerTitle == null
+              ? 'Solve the current puzzle to unlock this one.'
+              : 'Solve "$blockerTitle" first to unlock this puzzle.',
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final isSolved = progress.isCompleted;
     const solvedGreen = Color(0xFF15803D);
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: isSolved
-            ? const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFFF0FDF4), Color(0xFFECFDF5)],
-              )
-            : const LinearGradient(colors: [Colors.white, Colors.white]),
-        border: Border.all(
-          color: isSolved ? const Color(0xFF86EFAC) : const Color(0xFFD7E2F3),
-          width: isSolved ? 1.5 : 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isSolved
-                ? solvedGreen.withValues(alpha: 0.10)
-                : const Color(0xFF0F2F68).withValues(alpha: 0.05),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
+    return Opacity(
+      opacity: locked ? 0.55 : 1,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => PuzzlePlayerScreen(puzzle: puzzle),
-              ),
-            );
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final isCompact = constraints.maxWidth < 430;
+          gradient: isSolved
+              ? const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFFF0FDF4), Color(0xFFECFDF5)],
+                )
+              : const LinearGradient(colors: [Colors.white, Colors.white]),
+          border: Border.all(
+            color: isSolved ? const Color(0xFF86EFAC) : const Color(0xFFD7E2F3),
+            width: isSolved ? 1.5 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: isSolved
+                  ? solvedGreen.withValues(alpha: 0.10)
+                  : const Color(0xFF0F2F68).withValues(alpha: 0.05),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(24),
+            onTap: locked
+                ? () => _showLockedMessage(context)
+                : () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => PuzzlePlayerScreen(puzzle: puzzle),
+                      ),
+                    );
+                  },
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isCompact = constraints.maxWidth < 430;
 
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        gradient: LinearGradient(
-                          colors: isSolved
-                              ? const [Color(0xFF15803D), Color(0xFF34D399)]
-                              : const [Color(0xFF123D9B), Color(0xFF56C4FF)],
-                        ),
-                      ),
-                      child: Icon(
-                        isSolved ? Icons.check_rounded : _iconFor(puzzle.type),
-                        color: Colors.white,
-                        size: 28,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              _MiniTag(puzzle.type.label),
-                              _MiniTag(puzzle.language),
-                              _MiniTag(puzzle.difficulty),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            puzzle.title,
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                  color: isSolved
-                                      ? const Color(0xFF14532D)
-                                      : null,
-                                ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            puzzle.description,
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                          const SizedBox(height: 14),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              _ProgressPill(
-                                label: 'Attempts ${progress.attempts}',
-                                color: const Color(0xFF123D9B),
-                              ),
-                              _ProgressPill(
-                                label: 'Best ${progress.bestScore}%',
-                                color: const Color(0xFF0EA5E9),
-                              ),
-                              _ProgressPill(
-                                label: isSolved ? 'Completed' : 'Not started',
-                                color: isSolved
-                                    ? solvedGreen
-                                    : const Color(0xFFEA580C),
-                                icon: isSolved
-                                    ? Icons.check_circle_rounded
-                                    : Icons.play_circle_outline_rounded,
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (!isCompact) ...[
-                      const SizedBox(width: 8),
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Container(
-                        width: 38,
-                        height: 38,
+                        width: 60,
+                        height: 60,
                         decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color:
-                              (isSolved ? solvedGreen : const Color(0xFF123D9B))
-                                  .withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(20),
+                          gradient: LinearGradient(
+                            colors: isSolved
+                                ? const [Color(0xFF15803D), Color(0xFF34D399)]
+                                : const [Color(0xFF123D9B), Color(0xFF56C4FF)],
+                          ),
                         ),
                         child: Icon(
-                          isSolved
-                              ? Icons.check_circle_outline_rounded
-                              : Icons.arrow_forward_rounded,
-                          color: isSolved
-                              ? solvedGreen
-                              : const Color(0xFF123D9B),
+                          locked
+                              ? Icons.lock_rounded
+                              : isSolved
+                              ? Icons.check_rounded
+                              : _iconFor(puzzle.type),
+                          semanticLabel: locked ? 'Locked puzzle' : null,
+                          color: Colors.white,
+                          size: 28,
                         ),
                       ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                _MiniTag(puzzle.type.label),
+                                _MiniTag(puzzle.language),
+                                _MiniTag(puzzle.difficulty),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              puzzle.title,
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                    color: isSolved
+                                        ? const Color(0xFF14532D)
+                                        : null,
+                                  ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              puzzle.description,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            const SizedBox(height: 14),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                _ProgressPill(
+                                  label: 'Attempts ${progress.attempts}',
+                                  color: const Color(0xFF123D9B),
+                                ),
+                                _ProgressPill(
+                                  label: 'Best ${progress.bestScore}%',
+                                  color: const Color(0xFF0EA5E9),
+                                ),
+                                _ProgressPill(
+                                  label: locked
+                                      ? 'Locked · solve the previous puzzle'
+                                      : isSolved
+                                      ? 'Completed'
+                                      : 'Not started',
+                                  color: locked
+                                      ? const Color(0xFF64748B)
+                                      : isSolved
+                                      ? solvedGreen
+                                      : const Color(0xFFEA580C),
+                                  icon: locked
+                                      ? Icons.lock_outline_rounded
+                                      : isSolved
+                                      ? Icons.check_circle_rounded
+                                      : Icons.play_circle_outline_rounded,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (!isCompact) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color:
+                                (isSolved
+                                        ? solvedGreen
+                                        : const Color(0xFF123D9B))
+                                    .withValues(alpha: 0.10),
+                          ),
+                          child: Icon(
+                            locked
+                                ? Icons.lock_outline_rounded
+                                : isSolved
+                                ? Icons.check_circle_outline_rounded
+                                : Icons.arrow_forward_rounded,
+                            color: locked
+                                ? const Color(0xFF64748B)
+                                : isSolved
+                                ? solvedGreen
+                                : const Color(0xFF123D9B),
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
         ),

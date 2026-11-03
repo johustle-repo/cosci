@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:pseudocode_apk/models/quiz.dart';
 import 'package:pseudocode_apk/models/quiz_question.dart';
 import 'package:pseudocode_apk/services/quiz_service.dart';
+import 'package:pseudocode_apk/services/sequential_unlock_policy.dart';
 
 class QuizzesProvider extends ChangeNotifier {
   QuizService? _quizService;
@@ -24,6 +25,33 @@ class QuizzesProvider extends ChangeNotifier {
 
   List<QuizAttemptSummary> attemptsFor(String quizId) =>
       _attemptsByQuizId[quizId] ?? const [];
+
+  /// Passed, or every attempt used.
+  bool isFinished(Quiz quiz) {
+    final attempts = attemptsFor(quiz.id);
+    return SequentialUnlockPolicy.isQuizFinished(
+      anyAttemptPassed: attempts.any((attempt) => attempt.passed),
+      attemptsUsed: attempts.length,
+      attemptLimit: quiz.attemptLimit,
+    );
+  }
+
+  // Quizzes unlock one at a time in list order: a quiz opens only after
+  // every quiz before it is finished.
+  Set<String> get unlockedQuizIds => SequentialUnlockPolicy.unlockedIds(
+    _quizzes.map((quiz) => quiz.id).toList(),
+    _quizzes.map(isFinished).toList(),
+  );
+
+  bool isUnlocked(String quizId) => unlockedQuizIds.contains(quizId);
+
+  /// The quiz the student must finish next, or null when all are finished.
+  Quiz? get currentQuiz {
+    final index = SequentialUnlockPolicy.currentIndex(
+      _quizzes.map(isFinished).toList(),
+    );
+    return index < _quizzes.length ? _quizzes[index] : null;
+  }
 
   void attach(QuizService quizService) {
     _quizService = quizService;
