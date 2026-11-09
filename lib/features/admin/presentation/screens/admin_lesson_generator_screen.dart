@@ -98,6 +98,7 @@ class _State extends State<AdminLessonGeneratorScreen> {
           ),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 3),
+          persist: false,
         ),
       );
       return;

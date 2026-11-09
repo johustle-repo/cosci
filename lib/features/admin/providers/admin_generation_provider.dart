@@ -366,10 +366,17 @@ class AdminGenerationProvider extends ChangeNotifier {
       'estimatedMinutes': item['estimatedMinutes'] is num
           ? (item['estimatedMinutes'] as num).toInt().clamp(35, 50)
           : 40,
-      'learningObjective': value(
-        'learningObjective',
-        'By the end of this lesson, learners can explain $topic and apply it in a simple $language program.',
-      ),
+      'learningObjective': item['learningObjective'] is List
+          ? (item['learningObjective'] as List)
+                .map((e) => e.toString().trim())
+                .where((e) => e.isNotEmpty)
+                .join('\n')
+          : value(
+              'learningObjective',
+              'Explain what $topic is and when it is used.\n'
+                  'Trace a $language program that uses $topic and predict its output.\n'
+                  'Write and debug a short $language program that applies $topic.',
+            ),
       'keyConcepts': extendedList('keyConcepts', [
         topic,
         'algorithm design',

@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pseudocode_apk/models/puzzle.dart';
 import 'package:pseudocode_apk/services/firestore_service.dart';
+import 'package:pseudocode_apk/services/lesson_language_policy.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class PuzzleService {
@@ -18,6 +19,15 @@ class PuzzleService {
         .where((doc) => doc.data()['isPublished'] as bool? ?? true)
         .where((doc) => _eligible(doc.data(), user?.program, user?.yearLevel))
         .map((doc) => Puzzle.fromMap(doc.id, doc.data()))
+        // 1st Year students see only C++ puzzles.
+        .where(
+          (puzzle) =>
+              !LessonLanguagePolicy.restrictsToCpp(
+                role: user?.normalizedRole,
+                yearLevel: user?.yearLevel,
+              ) ||
+              LessonLanguagePolicy.isCpp(puzzle.language),
+        )
         .toList();
 
     puzzles.sort(

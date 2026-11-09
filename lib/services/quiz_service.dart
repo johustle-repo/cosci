@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pseudocode_apk/models/quiz.dart';
 import 'package:pseudocode_apk/models/quiz_question.dart';
 import 'package:pseudocode_apk/services/firestore_service.dart';
+import 'package:pseudocode_apk/services/lesson_language_policy.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:convert';
 import 'dart:math';
@@ -70,6 +71,12 @@ class QuizService {
       snapshot.docs
           .where((doc) => doc.data()['isPublished'] as bool? ?? true)
           .where((doc) => _eligible(doc.data(), user?.program, user?.yearLevel))
+          // 1st Year students see only C++ quizzes.
+          .where(
+            (doc) =>
+                !_cppOnly(user?.normalizedRole, user?.yearLevel) ||
+                LessonLanguagePolicy.isCpp(doc.data()['language'] as String?),
+          )
           .map((doc) async {
             final data = doc.data();
             final count = await _resolveQuestionCount(doc.reference, data);
@@ -87,6 +94,9 @@ class QuizService {
 
     return quizzes;
   }
+
+  bool _cppOnly(String? role, String? year) =>
+      LessonLanguagePolicy.restrictsToCpp(role: role, yearLevel: year);
 
   bool _eligible(Map<String, dynamic> data, String? program, String? year) {
     final programs = List<String>.from(

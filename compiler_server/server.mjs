@@ -891,10 +891,13 @@ function run(command, args, cwd, stdin = '', executionTimeoutMs = timeoutMs) {
       clearTimeout(timer);
       resolve({ code: 127, stdout: '', stderr: `Runtime unavailable: ${error.message}` });
     });
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
       clearTimeout(timer);
+      // Report the terminating signal (SIGFPE, SIGSEGV, ...) so the app can
+      // tell students *why* a native program crashed.
       resolve({
         code: timedOut ? 124 : (code ?? 1),
+        signal: timedOut ? 'SIGKILL' : (signal ?? null),
         stdout,
         stderr: timedOut ? 'Execution timed out.' : stderr,
       });

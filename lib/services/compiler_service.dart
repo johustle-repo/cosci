@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:pseudocode_apk/providers/simulation_provider.dart';
+import 'package:pseudocode_apk/services/error_diagnosis.dart';
 
 enum ExecutionStatus {
   passed,
@@ -20,12 +21,17 @@ class ExecutionResult {
     required this.message,
     this.line,
     this.column,
+    this.diagnosis,
   });
   final ExecutionStatus status;
   final String output;
   final String message;
   final int? line;
   final int? column;
+
+  /// Specific, learner-friendly description of the student's mistake
+  /// (syntax, compilation, runtime, or timeout), when one can be identified.
+  final ErrorDiagnosis? diagnosis;
   bool get succeeded => status == ExecutionStatus.passed;
   String get categoryLabel => switch (status) {
     ExecutionStatus.passed => 'Compiled successfully',
@@ -178,13 +184,29 @@ class CompilerService {
       final compileText =
           '${compile?['stderr'] ?? ''}${compile?['output'] ?? ''}'.trim();
       final output = '${run?['stdout'] ?? ''}'.trimRight();
-      final runtimeText = '${run?['stderr'] ?? ''}'.trim();
+      final signal = '${run?['signal'] ?? ''}'.trim();
+      final stderrText = '${run?['stderr'] ?? ''}'.trim();
+      // A crashed native program (e.g. C++ division by zero or an invalid
+      // array access) often prints nothing; describe the exit instead so the
+      // student still sees what happened.
+      final runtimeText = stderrText.isNotEmpty
+          ? stderrText
+          : runCode != 0 || signal.isNotEmpty
+          ? 'Program terminated${signal.isEmpty ? '' : ' by $signal'} (exit code $runCode).'
+          : '';
       if (compileCode != 0 || compileText.isNotEmpty) {
         if (_isTimeout(compileCode, compileText)) {
-          return const ExecutionResult(
+          return ExecutionResult(
             status: ExecutionStatus.timedOut,
             output: 'Compilation exceeded the time limit.',
             message: 'Compilation timed out before the program could run.',
+            diagnosis: ErrorDiagnoser.diagnose(
+              language: language,
+              sourceCode: sourceCode,
+              diagnostic: compileText,
+              compileFailed: true,
+              timedOut: true,
+            ),
           );
         }
         if (_isMissingRuntime(compileText)) {
@@ -194,23 +216,36 @@ class CompilerService {
             message: _missingRuntimeMessage(language),
           );
         }
-        final location = _diagnosticLocation(compileText);
+        final diagnosis = ErrorDiagnoser.diagnose(
+          language: language,
+          sourceCode: sourceCode,
+          diagnostic: compileText,
+          compileFailed: true,
+        );
         return ExecutionResult(
           status: ExecutionStatus.syntaxError,
           output: compileText,
-          message: location.$1 == null
-              ? 'Syntax or compilation error detected.'
-              : 'Syntax or compilation error near line ${location.$1}${location.$2 == null ? '' : ', column ${location.$2}'}.',
-          line: location.$1,
-          column: location.$2,
+          message: diagnosis.line == null
+              ? '${diagnosis.kind.label}: ${diagnosis.title}.'
+              : '${diagnosis.kind.label} on line ${diagnosis.line}${diagnosis.column == null ? '' : ', column ${diagnosis.column}'}: ${diagnosis.title}.',
+          line: diagnosis.line,
+          column: diagnosis.column,
+          diagnosis: diagnosis,
         );
       }
       if (runCode != 0 || runtimeText.isNotEmpty) {
         if (_isTimeout(runCode, runtimeText)) {
-          return const ExecutionResult(
+          return ExecutionResult(
             status: ExecutionStatus.timedOut,
             output: 'Execution exceeded the time limit.',
             message: 'The program ran for too long and was stopped safely.',
+            diagnosis: ErrorDiagnoser.diagnose(
+              language: language,
+              sourceCode: sourceCode,
+              diagnostic: runtimeText,
+              compileFailed: false,
+              timedOut: true,
+            ),
           );
         }
         if (_isMissingStandardInput(runtimeText)) {
@@ -220,17 +255,34 @@ class CompilerService {
             message: stdin.trim().isEmpty
                 ? 'Input required. Add one line in Standard input for every Scanner read, then validate again.'
                 : 'Not enough standard input. Add one line for every Scanner read, in the same order, then validate again.',
+            diagnosis: ErrorDiagnoser.diagnose(
+              language: language,
+              sourceCode: sourceCode,
+              diagnostic: runtimeText,
+              compileFailed: false,
+            ),
           );
         }
-        final location = _diagnosticLocation(runtimeText);
+        final diagnosis = ErrorDiagnoser.diagnose(
+          language: language,
+          sourceCode: sourceCode,
+          diagnostic: runtimeText,
+          compileFailed: false,
+        );
+        // JavaScript has no separate compile step, so its syntax errors are
+        // reported while running.
+        final status = diagnosis.kind == ErrorKind.syntax
+            ? ExecutionStatus.syntaxError
+            : ExecutionStatus.runtimeError;
         return ExecutionResult(
-          status: ExecutionStatus.runtimeError,
+          status: status,
           output: runtimeText,
-          message: location.$1 == null
-              ? 'Runtime error detected.'
-              : 'Runtime error near line ${location.$1}.',
-          line: location.$1,
-          column: location.$2,
+          message: diagnosis.line == null
+              ? '${diagnosis.kind.label}: ${diagnosis.title}.'
+              : '${diagnosis.kind.label} on line ${diagnosis.line}: ${diagnosis.title}.',
+          line: diagnosis.line,
+          column: diagnosis.column,
+          diagnosis: diagnosis,
         );
       }
       return ExecutionResult(
@@ -293,16 +345,4 @@ String _sourceFileName(ProgrammingLanguage language, String sourceCode) {
   ).firstMatch(sourceCode);
   final typeName = publicType?.group(1);
   return typeName == null ? language.fileName : '$typeName.java';
-}
-
-(int?, int?) _diagnosticLocation(String text) {
-  final match = RegExp(r'(?:[A-Za-z0-9_.-]+:)?(\d+):(\d+)').firstMatch(text);
-  if (match != null) {
-    return (int.tryParse(match.group(1)!), int.tryParse(match.group(2)!));
-  }
-  final lineOnly = RegExp(
-    r'\bline\s+(\d+)\b',
-    caseSensitive: false,
-  ).firstMatch(text);
-  return (lineOnly == null ? null : int.tryParse(lineOnly.group(1)!), null);
 }

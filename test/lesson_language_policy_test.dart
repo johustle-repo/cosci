@@ -58,5 +58,43 @@ void main() {
         isTrue,
       );
     });
+
+    test('only 1st Year students are limited to C++ content', () {
+      expect(
+        LessonLanguagePolicy.restrictsToCpp(
+          role: 'student',
+          yearLevel: '1st Year',
+        ),
+        isTrue,
+      );
+      expect(
+        LessonLanguagePolicy.restrictsToCpp(
+          role: null,
+          yearLevel: 'First Year',
+        ),
+        isTrue,
+      );
+      expect(
+        LessonLanguagePolicy.restrictsToCpp(
+          role: 'student',
+          yearLevel: '2nd Year',
+        ),
+        isFalse,
+      );
+      expect(
+        LessonLanguagePolicy.restrictsToCpp(
+          role: 'instructor',
+          yearLevel: '1st Year',
+        ),
+        isFalse,
+      );
+      expect(
+        LessonLanguagePolicy.restrictsToCpp(
+          role: 'admin',
+          yearLevel: '1st Year',
+        ),
+        isFalse,
+      );
+    });
   });
 }

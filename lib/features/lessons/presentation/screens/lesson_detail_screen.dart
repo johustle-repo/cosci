@@ -38,6 +38,8 @@ class LessonDetailScreen extends StatelessWidget {
           behavior: SnackBarBehavior.floating,
           backgroundColor: const Color(0xFF047857),
           duration: const Duration(seconds: 3),
+          // A SnackBar with an action persists by default; let it time out.
+          persist: false,
           content: Row(
             children: [
               const Icon(Icons.workspace_premium_rounded, color: Colors.white),
@@ -147,83 +149,62 @@ class LessonDetailScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Description
+                      // Lesson overview: what the lesson is about.
                       _Card(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             _SectionTitle(
                               icon: Icons.description_rounded,
-                              title: 'Overview',
+                              title: 'Lesson Overview',
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              lesson.description,
+                              lesson.overviewText,
                               style: const TextStyle(
                                 fontSize: 15,
                                 height: 1.65,
                                 color: Color(0xFF1E293B),
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-
-                      // Learning objective
-                      if (lesson.learningObjective.isNotEmpty) ...[
-                        _Card(
-                          accent: const Color(0xFF1D4ED8),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _SectionTitle(
-                                icon: Icons.flag_rounded,
-                                title: 'Learning Objective',
-                              ),
-                              const SizedBox(height: 10),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    width: 4,
-                                    height: 48,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF1D4ED8),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
+                            const SizedBox(height: 16),
+                            Wrap(
+                              spacing: 24,
+                              runSpacing: 12,
+                              children: [
+                                _MetaTile(
+                                  icon: Icons.code_rounded,
+                                  label: 'Language',
+                                  value: lesson.language,
+                                ),
+                                if (lesson.topic.isNotEmpty)
+                                  _MetaTile(
+                                    icon: Icons.topic_rounded,
+                                    label: 'Topic',
+                                    value: lesson.topic,
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      lesson.learningObjective,
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        height: 1.6,
-                                        color: Color(0xFF1E293B),
-                                        fontStyle: FontStyle.italic,
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                                _MetaTile(
+                                  icon: Icons.bar_chart_rounded,
+                                  label: 'Difficulty',
+                                  value: lesson.difficulty,
+                                ),
+                                _MetaTile(
+                                  icon: Icons.timer_outlined,
+                                  label: 'Duration',
+                                  value: '${lesson.estimatedMinutes} min',
+                                ),
+                              ],
+                            ),
+                            if (lesson.keyConcepts.isNotEmpty) ...[
+                              const SizedBox(height: 16),
+                              const Text(
+                                'Key concepts',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF0F172A),
+                                ),
                               ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                      ],
-
-                      // Key concepts
-                      if (lesson.keyConcepts.isNotEmpty) ...[
-                        _Card(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _SectionTitle(
-                                icon: Icons.lightbulb_outline_rounded,
-                                title: 'Key Concepts',
-                              ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 8),
                               Wrap(
                                 spacing: 8,
                                 runSpacing: 8,
@@ -232,10 +213,75 @@ class LessonDetailScreen extends StatelessWidget {
                                     .toList(),
                               ),
                             ],
-                          ),
+                          ],
                         ),
-                        const SizedBox(height: 14),
-                      ],
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Learning objectives: what the learner will be able
+                      // to do after the lesson.
+                      _Card(
+                        accent: const Color(0xFF1D4ED8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _SectionTitle(
+                              icon: Icons.flag_rounded,
+                              title: 'Learning Objectives',
+                            ),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'By the end of this lesson, you should be able to:',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Color(0xFF475569),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            for (final (index, objective)
+                                in lesson.objectives.indexed)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: 26,
+                                      height: 26,
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEAF3FF),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        '${index + 1}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          color: Color(0xFF1D4ED8),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(top: 3),
+                                        child: Text(
+                                          objective,
+                                          style: const TextStyle(
+                                            fontSize: 14.5,
+                                            height: 1.5,
+                                            color: Color(0xFF1E293B),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
 
                       if (lesson.prerequisites.isNotEmpty) ...[
                         _ListCard(
@@ -325,34 +371,6 @@ class LessonDetailScreen extends StatelessWidget {
                           icon: Icons.summarize_rounded,
                           title: 'Lesson Summary',
                           text: lesson.summary,
-                        ),
-                        const SizedBox(height: 14),
-                      ],
-
-                      // Topic & meta
-                      if (lesson.topic.isNotEmpty) ...[
-                        _Card(
-                          child: Row(
-                            children: [
-                              _MetaTile(
-                                icon: Icons.topic_rounded,
-                                label: 'Topic',
-                                value: lesson.topic,
-                              ),
-                              const SizedBox(width: 24),
-                              _MetaTile(
-                                icon: Icons.bar_chart_rounded,
-                                label: 'Difficulty',
-                                value: lesson.difficulty,
-                              ),
-                              const SizedBox(width: 24),
-                              _MetaTile(
-                                icon: Icons.timer_outlined,
-                                label: 'Duration',
-                                value: '${lesson.estimatedMinutes} min',
-                              ),
-                            ],
-                          ),
                         ),
                         const SizedBox(height: 14),
                       ],
@@ -872,6 +890,7 @@ class _MetaTile extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, size: 13, color: const Color(0xFF94A3B8)),
             const SizedBox(width: 4),

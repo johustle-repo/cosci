@@ -23,6 +23,7 @@ import 'package:pseudocode_apk/features/admin/services/admin_syllabus_service.da
 import 'package:pseudocode_apk/providers/auth_provider.dart';
 import 'package:pseudocode_apk/providers/dashboard_provider.dart';
 import 'package:pseudocode_apk/providers/gamification_provider.dart';
+import 'package:pseudocode_apk/providers/language_selection_provider.dart';
 import 'package:pseudocode_apk/providers/lessons_provider.dart';
 import 'package:pseudocode_apk/providers/progress_provider.dart';
 import 'package:pseudocode_apk/providers/puzzles_provider.dart';
@@ -91,6 +92,9 @@ class AppProviders {
       create: (_) => DashboardProvider(),
       update: (_, dashboardService, dashboardProvider) =>
           dashboardProvider!..attach(dashboardService),
+    ),
+    ChangeNotifierProvider<LanguageSelectionProvider>(
+      create: (_) => LanguageSelectionProvider(),
     ),
     ChangeNotifierProxyProvider<LessonService, LessonsProvider>(
       create: (_) => LessonsProvider(),

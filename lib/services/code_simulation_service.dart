@@ -1,5 +1,6 @@
 import 'package:pseudocode_apk/models/code_simulation_activity.dart';
 import 'package:pseudocode_apk/services/firestore_service.dart';
+import 'package:pseudocode_apk/services/lesson_language_policy.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -19,6 +20,15 @@ class CodeSimulationService {
         .where((doc) => doc.data()['isPublished'] as bool? ?? true)
         .map((doc) => CodeSimulationActivity.fromMap(doc.id, doc.data()))
         .where((activity) => activity.expectedOutput.trim().isNotEmpty)
+        // 1st Year students see only C++ simulation tasks.
+        .where(
+          (activity) =>
+              !LessonLanguagePolicy.restrictsToCpp(
+                role: user?.normalizedRole,
+                yearLevel: user?.yearLevel,
+              ) ||
+              LessonLanguagePolicy.isCpp(activity.language),
+        )
         .toList();
 
     activities.sort((a, b) {

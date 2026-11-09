@@ -374,7 +374,7 @@ Return ONLY a JSON array — no markdown, no extra text:
     "audiencePrograms": ["BS Computer Science", "BS Information Technology", "BS Mathematics-CIT"],
     "yearLevels": ["1st Year", "2nd Year"],
     "estimatedMinutes": 40,
-    "learningObjective": "2-3 measurable outcomes stating what learners can explain, trace, and implement",
+    "learningObjective": "3-4 measurable learning objectives, ONE PER LINE separated by \\n, each starting with an action verb (Explain, Trace, Write, Debug, Compare)",
     "keyConcepts": ["5-7 specific concepts or terms used in this lesson"],
     "prerequisites": ["2-4 concrete ideas learners should know first"],
     "introduction": "A 120-180 word learner-friendly hook using a relatable campus, daily-life, or software scenario and two guiding questions.",

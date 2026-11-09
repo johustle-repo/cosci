@@ -98,8 +98,10 @@ CoSci is a role-based, gamified programming learning system for students of the 
 
 - Lists published lessons for the student's program and year level.
 - Applies a year-level language rule: 1st Year students see only C++ lessons, while 2nd Year students see lessons in every available language (C++, Java, and JavaScript).
-- Unlocks lessons one at a time in lesson order: only the first lesson is open at the start, and each next lesson unlocks after the current one is completed. Completed lessons stay open for review; locked lessons show a lock and cannot be opened.
-- Recommends the current unlocked lesson as the next step.
+- Provides a multi-select programming-language filter (All, C++, Java, JavaScript). Students can select several languages at once to study them side by side; the choice is shared with Quizzes and Puzzles and remembered on the device.
+- Groups lessons by language, with a completion bar and percentage for each language.
+- Unlocks lessons one at a time **within each language**: the first lesson of every language is open at the start, and each next lesson in that language unlocks after the current one is completed. Progress in one language never blocks another. Completed lessons stay open for review; locked lessons show a lock and cannot be opened.
+- Recommends the current unlocked lesson of each selected language as the next step.
 - Displays topic, language, difficulty, and completion information.
 - Opens lesson details while hiding unpublished content.
 
@@ -107,7 +109,9 @@ CoSci is a role-based, gamified programming learning system for students of the 
 
 **Purpose:** Teach one programming concept through structured explanations and examples.
 
-- Presents objectives, prerequisites, introduction, and key concepts.
+- Opens with a **Lesson Overview**: what the lesson covers, plus language, topic, difficulty, duration, and key concepts.
+- Lists numbered **Learning Objectives** ("By the end of this lesson, you should be able to: ..."). Objectives are entered one per line; lessons without stored objectives get objectives derived from their topic and key concepts.
+- Presents prerequisites and an introduction.
 - Displays correctly numbered algorithm steps.
 - Includes worked examples, mistakes, error guidance, and summaries.
 - Shows optional pseudocode and runnable code.
@@ -118,10 +122,13 @@ CoSci is a role-based, gamified programming learning system for students of the 
 **Purpose:** Let students edit, run, test, and submit programming solutions.
 
 - Supports C++, Java, and JavaScript.
+- Applies the year-level language rule: 1st Year students see only C++ simulation tasks and can only switch the editor to C++; 2nd Year students can use C++, Java, and JavaScript.
 - Provides starter code, editor, standard input, and console output.
 - Runs code through the hosted compiler service.
 - Handles terminal-compatible Java `Scanner` input.
 - Separates compilation, runtime, timeout, and logic errors.
+- Shows a detailed error card that names the student's specific mistake (for example *Missing semicolon*, *Undeclared variable 'total'*, *Division by zero*, *Array index out of bounds*, *Null reference*, *Infinite loop*), the error type (syntax, compilation, runtime, or time limit), the line and column, the student's own line of code, what went wrong, how to fix it, and the full compiler or runtime message.
+- Recognizes common g++, javac, Java runtime exception, and Node.js error messages, and explains native C++ crashes from their exit signal.
 - Provides reset and copy-output actions.
 - Shows a lesson-related engagement task.
 - Evaluates public and protected test cases.
@@ -132,7 +139,10 @@ CoSci is a role-based, gamified programming learning system for students of the 
 **Purpose:** Measure understanding of lesson concepts.
 
 - Lists published quizzes and their lesson context.
-- Unlocks quizzes one at a time: the next quiz unlocks after the current quiz is passed, or after all of its attempts are used so a student is never permanently blocked.
+- Applies the year-level language rule: 1st Year students see only C++ quizzes; 2nd Year students see quizzes in every available language (C++, Java, and JavaScript).
+- Provides the shared multi-select language filter and groups quizzes by language with per-language completion.
+- Unlocks quizzes one at a time **within each language**: the next quiz unlocks after the current quiz is passed, or after all of its attempts are used so a student is never permanently blocked.
+- Explains the step-by-step design to students through a "Why do these unlock step by step?" dialog (mastery learning, prerequisite sequencing, cognitive load). The design is submitted for expert validation using [expert_validation_form.md](expert_validation_form.md).
 - Provides question navigation and answer selection.
 - Grades attempts through the trusted evaluator when configured.
 - Displays scores, explanations, and completion feedback.
@@ -143,9 +153,11 @@ CoSci is a role-based, gamified programming learning system for students of the 
 **Purpose:** Reinforce syntax and algorithm sequencing through interactive challenges.
 
 - Lists published puzzles by topic and difficulty.
-- Unlocks puzzles one at a time: the next puzzle unlocks after the current puzzle is solved.
+- Applies the year-level language rule: 1st Year students see only C++ puzzles; 2nd Year students see puzzles in every available language (C++, Java, and JavaScript).
+- Provides the shared multi-select language filter and groups puzzles by language with per-language completion.
+- Unlocks puzzles one at a time **within each language**: the next puzzle in a language unlocks after the current one is solved.
 - Lets students arrange or select code pieces.
-- Validates solutions and displays feedback or hints.
+- Validates solutions and explains what part of a wrong answer is wrong without revealing the answer (for example which positions of a code sequence are out of order, or whether the chosen bug line or the issue type is incorrect), plus hints.
 - Updates attempts, XP, streak, and badge progress.
 
 ### Gamification and Achievements
@@ -162,6 +174,7 @@ CoSci is a role-based, gamified programming learning system for students of the 
 **Purpose:** Help students understand their learning growth and completed work.
 
 - Summarizes lessons, quizzes, puzzles, simulations, badges, XP, and streaks.
+- Shows **Progress by Programming Language**: an overall completion percentage across all languages, and for each language the percentage of lessons completed, quizzes passed, and puzzles solved. Every lesson, quiz, and puzzle counts as one item.
 - Displays recent learning activity.
 - Synchronizes data with instructor and admin reports.
 
@@ -257,7 +270,7 @@ CoSci is a role-based, gamified programming learning system for students of the 
 
 - Creates, edits, previews, publishes, unpublishes, and deletes lessons.
 - Configures audience, language, difficulty, order, and duration.
-- Manages objectives, concepts, algorithms, examples, mistakes, and summaries.
+- Manages objectives (one per line), concepts, algorithms, examples, mistakes, and summaries.
 - Stores runnable code, standard input, and expected output.
 - Compiles and validates examples before publishing.
 
@@ -366,13 +379,19 @@ CoSci is a role-based, gamified programming learning system for students of the 
 
 See [syllabus_process.md](syllabus_process.md) for the backend flow of syllabus uploading and lesson, quiz, and puzzle creation.
 
+## Expert Validation
+
+[expert_validation_form.md](expert_validation_form.md) is the instrument for subject-matter experts to validate the sequential (step-by-step) unlocking of lessons, quizzes, and puzzles. It describes the design, its pedagogical basis, ten rating criteria on a 4-point scale, space for recommendations, and signature blocks for three validators.
+
 ## System-Wide Capabilities
 
 - Role-based access for students, instructors, and administrators.
 - Firebase Authentication, verified-email gating, and account-state enforcement.
 - Firestore persistence for profiles, content, attempts, progress, and logs.
 - OCR-assisted ID extraction, CCS eligibility, name matching, and duplicate-ID prevention.
-- Hosted C++, Java, and JavaScript compilation with safe timeouts.
+- Hosted C++, Java, and JavaScript compilation with safe timeouts and learner-friendly error diagnosis.
+- Independent per-language learning paths with multi-language selection.
+- Year-level language rule across lessons, quizzes, puzzles, and code simulation: 1st Year students get C++ only, 2nd Year students get every language. Instructors and admins always see every language.
 - Trusted quiz and simulation evaluation using protected data.
 - Progress synchronization across student, instructor, and admin views.
 - PDF achievement certificates and web/native downloads.

@@ -1609,7 +1609,9 @@ class _LessonFormDialogState extends State<_LessonFormDialog> {
     if (_yearLevels.isEmpty) _yearLevels = {'1st Year', '2nd Year'};
     fill(
       _objectiveCtrl,
-      'By the end of this lesson, learners can explain $subject and apply it in a simple $_language program.',
+      'Explain what $subject is and when it is used.\n'
+      'Trace a $_language program that uses $subject and predict its output.\n'
+      'Write and debug a short $_language program that applies $subject.',
     );
     fill(_conceptsCtrl, '$subject, algorithm, $_language fundamentals');
     fill(
@@ -1918,10 +1920,13 @@ class _LessonFormDialogState extends State<_LessonFormDialog> {
                       _field(
                         child: TextFormField(
                           controller: _objectiveCtrl,
+                          minLines: 3,
+                          maxLines: 6,
                           decoration: _dec(
-                            'Learning objective *',
+                            'Learning objectives * (one per line)',
                             Icons.flag_rounded,
-                            hint: 'What should the learner be able to do?',
+                            hint:
+                                'Explain ...\nTrace ...\nWrite a program that ...',
                           ),
                           validator: (v) => v == null || v.trim().isEmpty
                               ? 'A measurable learning objective is required'

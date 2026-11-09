@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:pseudocode_apk/features/progress_tracking/presentation/widgets/earned_badges_card.dart';
-import 'package:pseudocode_apk/features/progress_tracking/presentation/widgets/progress_breakdown_card.dart';
+import 'package:pseudocode_apk/features/progress_tracking/presentation/widgets/language_progress_card.dart';
 import 'package:pseudocode_apk/features/progress_tracking/presentation/widgets/progress_hero_card.dart';
 import 'package:pseudocode_apk/features/progress_tracking/presentation/widgets/progress_kpi_grid.dart';
 import 'package:pseudocode_apk/features/progress_tracking/presentation/widgets/recent_activity_card.dart';
 import 'package:pseudocode_apk/features/progress_tracking/presentation/widgets/weak_topics_card.dart';
+import 'package:pseudocode_apk/models/language_progress.dart';
 import 'package:pseudocode_apk/providers/auth_provider.dart';
+import 'package:pseudocode_apk/providers/lessons_provider.dart';
 import 'package:pseudocode_apk/providers/progress_provider.dart';
+import 'package:pseudocode_apk/providers/puzzles_provider.dart';
+import 'package:pseudocode_apk/providers/quizzes_provider.dart';
 import 'package:pseudocode_apk/shared/widgets/app_scaffold.dart';
 import 'package:pseudocode_apk/shared/widgets/content_state_card.dart';
 
@@ -27,8 +31,48 @@ class _ProgressTrackingScreenState extends State<ProgressTrackingScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final userId = context.read<AuthProvider>().currentUser?.uid;
       context.read<ProgressProvider>().loadSummary(userId: userId);
+      // Per-language percentages are computed from the same content lists
+      // (and unlock/completion state) the Lessons, Quizzes, and Puzzles
+      // screens use.
+      context.read<LessonsProvider>().loadLessons(forceRefresh: true);
+      context.read<QuizzesProvider>().loadQuizzes(forceRefresh: true);
+      context.read<PuzzlesProvider>().loadPuzzles(forceRefresh: true);
     });
   }
+
+  LanguageProgressReport _languageReport(BuildContext context) {
+    final lessons = context.watch<LessonsProvider>();
+    final quizzes = context.watch<QuizzesProvider>();
+    final puzzles = context.watch<PuzzlesProvider>();
+    return LanguageProgressReport.build(
+      lessons: [
+        for (final lesson in lessons.lessons)
+          (
+            language: lesson.language,
+            completed: lessons.isCompleted(lesson.id),
+          ),
+      ],
+      quizzes: [
+        for (final quiz in quizzes.quizzes)
+          (
+            language: quiz.language,
+            completed: quizzes.attemptsFor(quiz.id).any((a) => a.passed),
+          ),
+      ],
+      puzzles: [
+        for (final puzzle in puzzles.puzzles)
+          (
+            language: puzzle.language,
+            completed: puzzles.progressFor(puzzle.id).isCompleted,
+          ),
+      ],
+    );
+  }
+
+  bool _contentLoading(BuildContext context) =>
+      context.watch<LessonsProvider>().isLoading ||
+      context.watch<QuizzesProvider>().isLoading ||
+      context.watch<PuzzlesProvider>().isLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -58,34 +102,12 @@ class _ProgressTrackingScreenState extends State<ProgressTrackingScreen> {
                 const SizedBox(height: 18),
                 ProgressKpiGrid(summary: summary),
                 const SizedBox(height: 18),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    if (constraints.maxWidth > 900) {
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: ProgressBreakdownCard(summary: summary),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: EarnedBadgesCard(
-                              badges: summary.earnedBadges,
-                            ),
-                          ),
-                        ],
-                      );
-                    }
-
-                    return Column(
-                      children: [
-                        ProgressBreakdownCard(summary: summary),
-                        const SizedBox(height: 14),
-                        EarnedBadgesCard(badges: summary.earnedBadges),
-                      ],
-                    );
-                  },
+                LanguageProgressCard(
+                  report: _languageReport(context),
+                  isLoading: _contentLoading(context),
                 ),
+                const SizedBox(height: 18),
+                EarnedBadgesCard(badges: summary.earnedBadges),
                 const SizedBox(height: 18),
                 LayoutBuilder(
                   builder: (context, constraints) {

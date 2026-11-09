@@ -90,9 +90,12 @@ class _OutputPredictionPuzzleViewState
                           content: Text(
                             result.isCorrect
                                 ? 'Correct output. Score: ${result.score}%'
-                                : 'That output is incorrect. Score: ${result.score}%',
+                                : context
+                                          .read<PuzzlesProvider>()
+                                          .statusMessage ??
+                                      'Not quite right yet. Score: ${result.score}%',
                           ),
-                          duration: const Duration(seconds: 3),
+                          duration: Duration(seconds: result.isCorrect ? 3 : 6),
                         ),
                       );
                       await PuzzlePlayerScreen.showRewardIfNeeded(context);

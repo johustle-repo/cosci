@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:pseudocode_apk/features/gamification/presentation/widgets/activity_gamification_card.dart';
@@ -30,6 +32,12 @@ class _QuizPlayerScreenState extends State<QuizPlayerScreen> {
   Map<String, Map<String, dynamic>> _feedback = const {};
   _DraftStatus _draftStatus = _DraftStatus.loading;
   DateTime? _draftSavedAt;
+  // New seed on every open and every retake, so the question order is
+  // reshuffled per attempt but stays stable while the student answers.
+  int _shuffleSeed = Random().nextInt(1 << 31);
+
+  List<QuizQuestion> _shuffled(List<QuizQuestion> questions) =>
+      List<QuizQuestion>.of(questions)..shuffle(Random(_shuffleSeed));
 
   @override
   void initState() {
@@ -160,7 +168,7 @@ class _QuizPlayerScreenState extends State<QuizPlayerScreen> {
   @override
   Widget build(BuildContext context) {
     final quizzesProvider = context.watch<QuizzesProvider>();
-    final questions = quizzesProvider.questionsFor(widget.quiz.id);
+    final questions = _shuffled(quizzesProvider.questionsFor(widget.quiz.id));
     final attempts = quizzesProvider.attemptsFor(widget.quiz.id);
     final attemptsRemaining = (widget.quiz.attemptLimit - attempts.length)
         .clamp(0, widget.quiz.attemptLimit);
@@ -268,6 +276,7 @@ class _QuizPlayerScreenState extends State<QuizPlayerScreen> {
                           _feedback = const {};
                           _draftStatus = _DraftStatus.ready;
                           _draftSavedAt = null;
+                          _shuffleSeed = Random().nextInt(1 << 31);
                         });
                         await _clearDraft();
                       },

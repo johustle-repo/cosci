@@ -38,13 +38,20 @@ class PuzzlePlayerScreen extends StatelessWidget {
           _FeedbackBanner(message: provider.statusMessage!),
           const SizedBox(height: 12),
         ],
-        switch (puzzle.type) {
-          PuzzleType.codeFlow => CodeFlowPuzzleView(puzzle: puzzle),
-          PuzzleType.outputPrediction => OutputPredictionPuzzleView(
+        // A solved puzzle is closed: no more attempts, only a way forward.
+        if (progress.isCompleted)
+          _SolvedPuzzleCard(
             puzzle: puzzle,
-          ),
-          PuzzleType.debugBug => DebugBugPuzzleView(puzzle: puzzle),
-        },
+            nextPuzzle: provider.currentPuzzleFor(puzzle.language),
+          )
+        else
+          switch (puzzle.type) {
+            PuzzleType.codeFlow => CodeFlowPuzzleView(puzzle: puzzle),
+            PuzzleType.outputPrediction => OutputPredictionPuzzleView(
+              puzzle: puzzle,
+            ),
+            PuzzleType.debugBug => DebugBugPuzzleView(puzzle: puzzle),
+          },
       ],
     );
 
@@ -56,16 +63,77 @@ class PuzzlePlayerScreen extends StatelessWidget {
   }
 
   static Future<void> showRewardIfNeeded(BuildContext context) async {
-    final reward = context.read<PuzzlesProvider>().latestReward;
+    // Read the provider up front: once the puzzle is solved the puzzle view
+    // is replaced by the solved card, so [context] may be unmounted by the
+    // time the dialog closes.
+    final provider = context.read<PuzzlesProvider>();
+    final reward = provider.latestReward;
     if (reward == null) {
       return;
     }
 
     await RewardPopupDialog.show(context, reward);
-    if (!context.mounted) {
-      return;
-    }
-    context.read<PuzzlesProvider>().clearLatestReward();
+    provider.clearLatestReward();
+  }
+}
+
+class _SolvedPuzzleCard extends StatelessWidget {
+  const _SolvedPuzzleCard({required this.puzzle, required this.nextPuzzle});
+
+  final Puzzle puzzle;
+  final Puzzle? nextPuzzle;
+
+  @override
+  Widget build(BuildContext context) {
+    final next = nextPuzzle;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.verified_rounded, color: Color(0xFF15803D)),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Puzzle solved',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              next == null
+                  ? 'You scored 100% and have solved every ${puzzle.language} puzzle. Great work!'
+                  : 'You scored 100% on this puzzle. Continue to the next one.',
+            ),
+            const SizedBox(height: 18),
+            if (next != null)
+              FilledButton.icon(
+                onPressed: () {
+                  context.read<PuzzlesProvider>().clearMessages();
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute<void>(
+                      builder: (_) => PuzzlePlayerScreen(puzzle: next),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.arrow_forward_rounded),
+                label: Text('Next Puzzle: ${next.title}'),
+              )
+            else
+              FilledButton.icon(
+                onPressed: () => Navigator.of(context).maybePop(),
+                icon: const Icon(Icons.grid_view_rounded),
+                label: const Text('Back to Puzzles'),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

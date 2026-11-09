@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:pseudocode_apk/models/lesson.dart';
+import 'package:pseudocode_apk/services/language_tracks.dart';
 import 'package:pseudocode_apk/services/lesson_service.dart';
 import 'package:pseudocode_apk/services/sequential_unlock_policy.dart';
 
@@ -17,29 +18,46 @@ class LessonsProvider extends ChangeNotifier {
   Set<String> get completedLessonIds => _completedLessonIds;
   bool isCompleted(String lessonId) => _completedLessonIds.contains(lessonId);
 
-  // Lessons unlock one at a time in sortOrder: a lesson opens only after
-  // every lesson before it has been completed.
+  // Lessons unlock one at a time in sortOrder *within each programming
+  // language*, so a student can take C++ and Java lessons at the same time.
   List<bool> get _finished =>
       _lessons.map((lesson) => isCompleted(lesson.id)).toList();
 
-  Set<String> get unlockedLessonIds => SequentialUnlockPolicy.unlockedIds(
-    _lessons.map((lesson) => lesson.id).toList(),
-    _finished,
-  );
+  List<String> get _tracks => _lessons
+      .map((lesson) => LanguageTracks.normalize(lesson.language))
+      .toList();
+
+  /// Language tracks that have at least one lesson, in display order.
+  List<String> get languages =>
+      LanguageTracks.available(_lessons.map((lesson) => lesson.language));
+
+  Set<String> get unlockedLessonIds =>
+      SequentialUnlockPolicy.unlockedIdsByTrack(
+        _lessons.map((lesson) => lesson.id).toList(),
+        _tracks,
+        _finished,
+      );
 
   bool isUnlocked(String lessonId) => unlockedLessonIds.contains(lessonId);
 
-  /// The lesson the student must finish next, or null when all are complete.
-  Lesson? get currentLesson {
-    final index = SequentialUnlockPolicy.currentIndex(_finished);
-    return index < _lessons.length ? _lessons[index] : null;
+  /// The lesson the student must finish next in [language], or null when
+  /// that language track is complete.
+  Lesson? currentLessonFor(String language) {
+    final index = SequentialUnlockPolicy.currentIndexInTrack(
+      LanguageTracks.normalize(language),
+      _tracks,
+      _finished,
+    );
+    return index == null ? null : _lessons[index];
   }
 
-  /// With sequential unlocking, the only recommendation is the current lesson.
-  List<Lesson> get recommendedLessons {
-    final current = currentLesson;
-    return current == null ? const [] : [current];
-  }
+  /// One recommendation per language track: its current lesson. Only tracks
+  /// in [selected] are included (an empty selection means all languages).
+  List<Lesson> recommendedLessons([Set<String> selected = const {}]) => [
+    for (final language in languages)
+      if (LanguageTracks.matches(selected, language))
+        ?currentLessonFor(language),
+  ];
 
   void attach(LessonService lessonService) {
     _lessonService = lessonService;

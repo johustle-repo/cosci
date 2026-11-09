@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:pseudocode_apk/features/quizzes/presentation/screens/quiz_player_screen.dart';
+import 'package:pseudocode_apk/models/quiz.dart';
+import 'package:pseudocode_apk/providers/language_selection_provider.dart';
 import 'package:pseudocode_apk/providers/quizzes_provider.dart';
+import 'package:pseudocode_apk/services/language_tracks.dart';
 import 'package:pseudocode_apk/shared/widgets/app_scaffold.dart';
 import 'package:pseudocode_apk/shared/widgets/content_state_card.dart';
 import 'package:pseudocode_apk/shared/widgets/info_chip.dart';
+import 'package:pseudocode_apk/shared/widgets/language_filter_bar.dart';
+import 'package:pseudocode_apk/shared/widgets/sequential_rationale.dart';
 
 class QuizzesScreen extends StatefulWidget {
   const QuizzesScreen({super.key, this.embedded = false});
@@ -27,13 +32,23 @@ class _QuizzesScreenState extends State<QuizzesScreen> {
   @override
   Widget build(BuildContext context) {
     final quizzesProvider = context.watch<QuizzesProvider>();
-    final quizzes = quizzesProvider.quizzes;
+    final selection = context.watch<LanguageSelectionProvider>();
+    final visibleLanguages = selection.visibleTracks(quizzesProvider.languages);
+    // Group the visible quizzes by language track, keeping list order inside
+    // each track.
+    final quizzes = [
+      for (final language in visibleLanguages)
+        ...quizzesProvider.quizzes.where(
+          (quiz) => LanguageTracks.normalize(quiz.language) == language,
+        ),
+    ];
 
     final content = Padding(
       padding: AppScaffold.pagePadding(context),
       child: quizzesProvider.isLoading && quizzes.isEmpty
           ? const Center(child: CircularProgressIndicator())
-          : quizzesProvider.errorMessage != null && quizzes.isEmpty
+          : quizzesProvider.errorMessage != null &&
+                quizzesProvider.quizzes.isEmpty
           ? _QuizzesStateCard(
               icon: Icons.cloud_off_rounded,
               title: 'Quiz content unavailable',
@@ -66,6 +81,17 @@ class _QuizzesScreenState extends State<QuizzesScreen> {
                   'Sharpen comprehension and logic with Firebase-backed quizzes, clear score states, and reward-linked progress.',
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
+                const SizedBox(height: 12),
+                const SequentialRationaleButton(contentLabel: 'quizzes'),
+                const SizedBox(height: 12),
+                LanguageFilterBar(
+                  languages: quizzesProvider.languages,
+                  countFor: (language) => quizzesProvider.quizzes
+                      .where(
+                        (q) => LanguageTracks.normalize(q.language) == language,
+                      )
+                      .length,
+                ),
                 const SizedBox(height: 18),
                 Expanded(
                   child: ListView.separated(
@@ -90,8 +116,26 @@ class _QuizzesScreenState extends State<QuizzesScreen> {
                             quiz.attemptLimit,
                           );
                       final locked = !quizzesProvider.isUnlocked(quiz.id);
-                      final blocker = quizzesProvider.currentQuiz;
-                      return Opacity(
+                      final blocker = quizzesProvider.currentQuizFor(
+                        quiz.language,
+                      );
+                      final track = LanguageTracks.normalize(quiz.language);
+                      final startsTrack =
+                          index == 0 ||
+                          LanguageTracks.normalize(
+                                quizzes[index - 1].language,
+                              ) !=
+                              track;
+                      final trackQuizzes = startsTrack
+                          ? quizzesProvider.quizzes
+                                .where(
+                                  (q) =>
+                                      LanguageTracks.normalize(q.language) ==
+                                      track,
+                                )
+                                .toList()
+                          : const <Quiz>[];
+                      final card = Opacity(
                         opacity: locked ? 0.55 : 1,
                         child: Card(
                           child: Padding(
@@ -247,7 +291,7 @@ class _QuizzesScreenState extends State<QuizzesScreen> {
                                     ),
                                     label: Text(
                                       locked
-                                          ? 'Locked · pass the previous quiz'
+                                          ? 'Locked · pass the previous ${quiz.language} quiz'
                                           : latest == null
                                           ? 'Start Quiz'
                                           : attemptsRemaining > 0
@@ -260,6 +304,22 @@ class _QuizzesScreenState extends State<QuizzesScreen> {
                             ),
                           ),
                         ),
+                      );
+                      if (!startsTrack) return card;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (index > 0) const SizedBox(height: 8),
+                          LanguageTrackHeader(
+                            language: track,
+                            completed: trackQuizzes
+                                .where(quizzesProvider.isFinished)
+                                .length,
+                            total: trackQuizzes.length,
+                            unitLabel: 'quizzes finished',
+                          ),
+                          card,
+                        ],
                       );
                     },
                   ),

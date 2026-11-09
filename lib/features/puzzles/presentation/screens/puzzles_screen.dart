@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:pseudocode_apk/features/puzzles/presentation/screens/puzzle_player_screen.dart';
 import 'package:pseudocode_apk/models/puzzle.dart';
+import 'package:pseudocode_apk/providers/language_selection_provider.dart';
 import 'package:pseudocode_apk/providers/puzzles_provider.dart';
+import 'package:pseudocode_apk/services/language_tracks.dart';
 import 'package:pseudocode_apk/shared/widgets/app_scaffold.dart';
 import 'package:pseudocode_apk/shared/widgets/content_state_card.dart';
 import 'package:pseudocode_apk/shared/widgets/info_chip.dart';
+import 'package:pseudocode_apk/shared/widgets/language_filter_bar.dart';
+import 'package:pseudocode_apk/shared/widgets/sequential_rationale.dart';
 
 class PuzzlesScreen extends StatefulWidget {
   const PuzzlesScreen({super.key, this.embedded = false});
@@ -28,6 +32,11 @@ class _PuzzlesScreenState extends State<PuzzlesScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<PuzzlesProvider>();
+    final selection = context.watch<LanguageSelectionProvider>();
+    final visibleLanguages = selection.visibleTracks(provider.languages);
+    List<Puzzle> trackOf(String language) => provider.puzzles
+        .where((p) => LanguageTracks.normalize(p.language) == language)
+        .toList();
 
     final content = RefreshIndicator(
       onRefresh: () =>
@@ -35,7 +44,20 @@ class _PuzzlesScreenState extends State<PuzzlesScreen> {
       child: ListView(
         padding: AppScaffold.pagePadding(context),
         children: [
-          _PuzzlesHero(puzzles: provider.puzzles, provider: provider),
+          _PuzzlesHero(
+            puzzles: [for (final l in visibleLanguages) ...trackOf(l)],
+            provider: provider,
+          ),
+          const SizedBox(height: 8),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: SequentialRationaleButton(contentLabel: 'puzzles'),
+          ),
+          const SizedBox(height: 8),
+          LanguageFilterBar(
+            languages: provider.languages,
+            countFor: (language) => trackOf(language).length,
+          ),
           const SizedBox(height: 18),
           if (provider.isLoading && provider.puzzles.isEmpty)
             const Center(
@@ -56,17 +78,30 @@ class _PuzzlesScreenState extends State<PuzzlesScreen> {
                   'No puzzles are available yet. Add puzzle documents to Firestore to populate this module.',
             )
           else
-            ...provider.puzzles.map(
-              (puzzle) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _PuzzleCard(
-                  puzzle: puzzle,
-                  progress: provider.progressFor(puzzle.id),
-                  locked: !provider.isUnlocked(puzzle.id),
-                  blockerTitle: provider.currentPuzzle?.title,
+            for (final language in visibleLanguages) ...[
+              LanguageTrackHeader(
+                language: language,
+                completed: trackOf(
+                  language,
+                ).where((p) => provider.progressFor(p.id).isCompleted).length,
+                total: trackOf(language).length,
+                unitLabel: 'puzzles solved',
+              ),
+              ...trackOf(language).map(
+                (puzzle) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _PuzzleCard(
+                    puzzle: puzzle,
+                    progress: provider.progressFor(puzzle.id),
+                    locked: !provider.isUnlocked(puzzle.id),
+                    blockerTitle: provider
+                        .currentPuzzleFor(puzzle.language)
+                        ?.title,
+                  ),
                 ),
               ),
-            ),
+              const SizedBox(height: 8),
+            ],
         ],
       ),
     );

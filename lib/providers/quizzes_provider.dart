@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:pseudocode_apk/models/quiz.dart';
 import 'package:pseudocode_apk/models/quiz_question.dart';
+import 'package:pseudocode_apk/services/language_tracks.dart';
 import 'package:pseudocode_apk/services/quiz_service.dart';
 import 'package:pseudocode_apk/services/sequential_unlock_policy.dart';
 
@@ -36,21 +37,32 @@ class QuizzesProvider extends ChangeNotifier {
     );
   }
 
-  // Quizzes unlock one at a time in list order: a quiz opens only after
-  // every quiz before it is finished.
-  Set<String> get unlockedQuizIds => SequentialUnlockPolicy.unlockedIds(
+  // Quizzes unlock one at a time in list order *within each programming
+  // language*, so quizzes in different languages can be taken side by side.
+  List<String> get _tracks =>
+      _quizzes.map((quiz) => LanguageTracks.normalize(quiz.language)).toList();
+
+  /// Language tracks that have at least one quiz, in display order.
+  List<String> get languages =>
+      LanguageTracks.available(_quizzes.map((quiz) => quiz.language));
+
+  Set<String> get unlockedQuizIds => SequentialUnlockPolicy.unlockedIdsByTrack(
     _quizzes.map((quiz) => quiz.id).toList(),
+    _tracks,
     _quizzes.map(isFinished).toList(),
   );
 
   bool isUnlocked(String quizId) => unlockedQuizIds.contains(quizId);
 
-  /// The quiz the student must finish next, or null when all are finished.
-  Quiz? get currentQuiz {
-    final index = SequentialUnlockPolicy.currentIndex(
+  /// The quiz the student must finish next in [language], or null when that
+  /// language track is finished.
+  Quiz? currentQuizFor(String language) {
+    final index = SequentialUnlockPolicy.currentIndexInTrack(
+      LanguageTracks.normalize(language),
+      _tracks,
       _quizzes.map(isFinished).toList(),
     );
-    return index < _quizzes.length ? _quizzes[index] : null;
+    return index == null ? null : _quizzes[index];
   }
 
   void attach(QuizService quizService) {

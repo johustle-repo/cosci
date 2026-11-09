@@ -28,10 +28,6 @@ class ProgressSummary {
   int get totalCompletedActivities =>
       completedLessons + completedQuizzes + completedPuzzles;
 
-  double get lessonProgress => _ratio(completedLessons, 12);
-  double get quizProgress => _ratio(completedQuizzes, 10);
-  double get puzzleProgress => _ratio(completedPuzzles, 10);
-
   factory ProgressSummary.empty() {
     return const ProgressSummary(
       completedLessons: 0,
@@ -76,14 +72,6 @@ class ProgressSummary {
       weakTopics: weakTopics,
       recentActivities: recentActivities,
     );
-  }
-
-  static double _ratio(int value, int target) {
-    if (target <= 0) {
-      return 0;
-    }
-
-    return (value / target).clamp(0.0, 1.0);
   }
 
   static int? _readInt(Object? value) {

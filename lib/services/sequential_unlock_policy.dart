@@ -27,6 +27,40 @@ class SequentialUnlockPolicy {
     return {for (var i = 0; i < ids.length && i <= current; i++) ids[i]};
   }
 
+  /// Per-track unlocking: items are split into independent tracks (one per
+  /// programming language) and the one-at-a-time rule applies inside each
+  /// track, so a student can progress in several languages at the same time.
+  /// [tracks] holds the track label of each item, aligned with [ids].
+  static Set<String> unlockedIdsByTrack(
+    List<String> ids,
+    List<String> tracks,
+    List<bool> finished,
+  ) {
+    assert(ids.length == tracks.length && ids.length == finished.length);
+    final blocked = <String>{};
+    final unlocked = <String>{};
+    for (var i = 0; i < ids.length; i++) {
+      final track = tracks[i];
+      if (blocked.contains(track)) continue;
+      unlocked.add(ids[i]);
+      if (!finished[i]) blocked.add(track);
+    }
+    return unlocked;
+  }
+
+  /// Index of the item the student must finish next inside [track], or null
+  /// when that track is complete (or has no items).
+  static int? currentIndexInTrack(
+    String track,
+    List<String> tracks,
+    List<bool> finished,
+  ) {
+    for (var i = 0; i < tracks.length; i++) {
+      if (tracks[i] == track && !finished[i]) return i;
+    }
+    return null;
+  }
+
   /// A quiz counts as finished once it is passed, or once every attempt has
   /// been used, so a student is never permanently blocked by one quiz.
   static bool isQuizFinished({

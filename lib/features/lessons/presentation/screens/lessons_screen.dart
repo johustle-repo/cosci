@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:pseudocode_apk/app/routes/app_routes.dart';
 import 'package:pseudocode_apk/models/lesson.dart';
+import 'package:pseudocode_apk/providers/language_selection_provider.dart';
 import 'package:pseudocode_apk/providers/lessons_provider.dart';
+import 'package:pseudocode_apk/services/language_tracks.dart';
 import 'package:pseudocode_apk/shared/widgets/app_scaffold.dart';
+import 'package:pseudocode_apk/shared/widgets/language_filter_bar.dart';
 
 class LessonsScreen extends StatefulWidget {
   const LessonsScreen({super.key, this.embedded = false});
@@ -26,6 +29,9 @@ class _LessonsScreenState extends State<LessonsScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<LessonsProvider>();
+    final selection = context.watch<LanguageSelectionProvider>();
+    final visibleLanguages = selection.visibleTracks(provider.languages);
+    final recommended = provider.recommendedLessons(visibleLanguages.toSet());
 
     final content = Padding(
       padding: AppScaffold.pagePadding(context),
@@ -87,25 +93,75 @@ class _LessonsScreenState extends State<LessonsScreen> {
                   ),
                 ),
                 const SizedBox(height: 18),
-                if (provider.recommendedLessons.isNotEmpty) ...[
+                LanguageFilterBar(
+                  languages: provider.languages,
+                  countFor: (language) => provider.lessons
+                      .where(
+                        (l) => LanguageTracks.normalize(l.language) == language,
+                      )
+                      .length,
+                ),
+                if (provider.languages.length > 1) const SizedBox(height: 18),
+                if (recommended.isNotEmpty) ...[
                   _RecommendationPanel(
-                    lessons: provider.recommendedLessons,
-                    completedCount: provider.completedLessonIds.length,
-                    totalCount: provider.lessons.length,
+                    lessons: recommended,
+                    completedCount: provider.lessons
+                        .where(
+                          (l) => visibleLanguages.contains(
+                            LanguageTracks.normalize(l.language),
+                          ),
+                        )
+                        .where((l) => provider.isCompleted(l.id))
+                        .length,
+                    totalCount: provider.lessons
+                        .where(
+                          (l) => visibleLanguages.contains(
+                            LanguageTracks.normalize(l.language),
+                          ),
+                        )
+                        .length,
                   ),
                   const SizedBox(height: 18),
                 ],
-                ...provider.lessons.map(
-                  (lesson) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: _LessonCard(
-                      lesson: lesson,
-                      completed: provider.isCompleted(lesson.id),
-                      locked: !provider.isUnlocked(lesson.id),
-                      blockerTitle: provider.currentLesson?.title,
-                    ),
+                for (final language in visibleLanguages) ...[
+                  Builder(
+                    builder: (context) {
+                      final track = provider.lessons
+                          .where(
+                            (l) =>
+                                LanguageTracks.normalize(l.language) ==
+                                language,
+                          )
+                          .toList();
+                      return LanguageTrackHeader(
+                        language: language,
+                        completed: track
+                            .where((l) => provider.isCompleted(l.id))
+                            .length,
+                        total: track.length,
+                        unitLabel: 'lessons completed',
+                      );
+                    },
                   ),
-                ),
+                  ...provider.lessons
+                      .where(
+                        (l) => LanguageTracks.normalize(l.language) == language,
+                      )
+                      .map(
+                        (lesson) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _LessonCard(
+                            lesson: lesson,
+                            completed: provider.isCompleted(lesson.id),
+                            locked: !provider.isUnlocked(lesson.id),
+                            blockerTitle: provider
+                                .currentLessonFor(lesson.language)
+                                ?.title,
+                          ),
+                        ),
+                      ),
+                  const SizedBox(height: 8),
+                ],
               ],
             ),
     );
@@ -303,7 +359,7 @@ class _LessonCard extends StatelessWidget {
                           Flexible(
                             child: Text(
                               locked
-                                  ? 'Locked · complete the previous lesson'
+                                  ? 'Locked · complete the previous ${lesson.language} lesson'
                                   : completed
                                   ? 'Review lesson'
                                   : 'Open lesson',
@@ -389,7 +445,7 @@ class _RecommendationPanel extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Lessons unlock one at a time. Complete this lesson to unlock the next one.',
+            'Each language has its own path. Lessons unlock one at a time per language, so you can study several languages side by side.',
             style: TextStyle(fontSize: 13, color: Color(0xFF475569)),
           ),
           const SizedBox(height: 12),
@@ -412,7 +468,7 @@ class _RecommendationPanel extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
               subtitle: Text(
-                '${lesson.difficulty} • ${lesson.errorFocus} focus',
+                '${lesson.language} • ${lesson.difficulty} • ${lesson.errorFocus} focus',
               ),
               trailing: const Icon(Icons.arrow_forward_rounded),
               onTap: () => Navigator.pushNamed(

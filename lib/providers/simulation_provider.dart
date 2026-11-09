@@ -294,8 +294,29 @@ int main() {
     notifyListeners();
   }
 
+  List<ProgrammingLanguage> _allowedLanguages = ProgrammingLanguage.values;
+
+  /// Languages the free-coding editor offers (C++ only for 1st Year students).
+  List<ProgrammingLanguage> get allowedLanguages => _allowedLanguages;
+
+  /// Limits the editor to C++ when [cppOnly] is true, switching away from any
+  /// other language that is currently open.
+  void restrictToCpp(bool cppOnly) {
+    final next = cppOnly
+        ? const [ProgrammingLanguage.cpp]
+        : ProgrammingLanguage.values;
+    if (listEquals(next, _allowedLanguages)) return;
+    _allowedLanguages = next;
+    if (!_allowedLanguages.contains(_selectedLanguage)) {
+      selectLanguage(ProgrammingLanguage.cpp);
+    } else {
+      notifyListeners();
+    }
+  }
+
   void selectLanguage(ProgrammingLanguage language) {
-    if (_selectedLanguage == language) {
+    if (_selectedLanguage == language ||
+        !_allowedLanguages.contains(language)) {
       return;
     }
 
