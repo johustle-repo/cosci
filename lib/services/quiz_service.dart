@@ -57,9 +57,10 @@ class QuizService {
     if (_evaluatorEndpoint.trim().isNotEmpty) {
       return _evaluatorEndpoint.trim();
     }
-    final host = Uri.base.host.toLowerCase();
-    final isLocal = host.isEmpty || host == 'localhost' || host == '127.0.0.1';
-    return isLocal ? 'https://cosci-compiler.onrender.com/quiz/evaluate' : '';
+    // Same hosted server as the compiler, so quizzes grade on Firebase
+    // Hosting and the APK without a build flag. A dart-define still
+    // overrides it (e.g. a local server during development).
+    return 'https://cosci-compiler.onrender.com/quiz/evaluate';
   }
 
   Future<List<Quiz>> fetchQuizzes() async {
